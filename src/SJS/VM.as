@@ -10,15 +10,15 @@ Notes to self:
 
 */
 
-package org.sixsided.scripting.SJS {
-  import org.sixsided.scripting.SJS.Inspector;
+package SJS {
+  import SJS.Inspector;
   import flash.utils.getDefinitionByName;
   import flash.utils.getQualifiedClassName;
  
   import flash.geom.*;
   import flash.display.*;
-  import org.sixsided.util.Promise;
-  import org.sixsided.util.ANSI;  
+  //import Promise;
+  import SJS.ANSI;  
 
   import flash.events.Event;
   import flash.events.EventDispatcher;
@@ -131,7 +131,8 @@ package org.sixsided.scripting.SJS {
     
     
     private function _vmUserTrace(...args) : void {
-      _vmTrace(ANSI.cyan(args.join(' ')));
+      //_vmTrace(ANSI.cyan(args.join(' ')));
+	  _vmTrace(args.join(' '));
     }
 
     private function get _osAsString() : String {
@@ -636,9 +637,9 @@ package org.sixsided.scripting.SJS {
         }
         
         private function AWAIT():void {
-          var p:Promise = opop();
-          halt();
-          p.onFulfill(_resumeFromPromise);
+          //var p:Promise = opop();
+          //halt();
+          //p.onFulfill(_resumeFromPromise);
         }
         
     } // VM

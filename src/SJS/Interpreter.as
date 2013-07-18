@@ -1,7 +1,7 @@
 /*
 Interpreter.as is a neat facade for the Simplified JavaScript classes.
 */
-package org.sixsided.scripting.SJS {
+package SJS {
   public class Interpreter {
 
     public var vm:VM;

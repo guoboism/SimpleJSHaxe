@@ -6,7 +6,7 @@
     listen for connections from the Flash app with:
       rlwrap nc -lk 8080    
 */
-package org.sixsided.scripting.SJS {
+package SJS {
   
   import flash.net.Socket;
   import flash.events.Event;

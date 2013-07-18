@@ -1,4 +1,4 @@
-package org.sixsided.scripting.SJS {
+package SJS {
   public class VmFunc {
     public var name:String;
     public var body:Array; // of *

@@ -42,33 +42,33 @@
   
 */
 
-package org.sixsided.scripting.SJS {
-    
-  import org.sixsided.util.ANSI;
-    
-  public class Parser {
+package sjs;
 
-      public var symtab:Object = {};
-      public var scopes:Array = [[]]; // just names
-      public var tokens:Array = [];
-      public var token:Object = null;
-      public var token_idx:int = 0;
+  import sjs.ANSI;
+    
+  class Parser {
+
+      public var symtab:Map<String,Dynamic>;
+      public var scopes:Array<Dynamic>; // just names //GB was = [[]]
+      public var tokens:Array<Dynamic>;
+      public var token:Dynamic = null;
+      public var token_idx:Int = 0;
       public var source_code:String;
-      public var generated_code:Array = [];
+      public var generated_code:Array<Dynamic>;
 
       public var ID_END    :String = '(end)';
       public var ID_LITERAL:String = '(literal)';
       public var ID_NAME   :String = '(name)'; // we attach IDs to lexer tokens
       public var T_NAME    :String = 'name';  // tokens from the lexer have type, value, from, and to
 
-      public var END_TOKEN :Object = {id:ID_END, toString:function():String{return "*END*";}};
+      public inline static var END_TOKEN :Dynamic = {id:'(end)', toString:function():String{return "*END*";}};
        
-      public var ast:Object;
+      public var ast:Dynamic;
 
 
       // debug cruft
-      public var xd:int = 0 ;
-      public var tracing:Boolean = false;
+      public var xd:Int = 0 ;
+      public var tracing:Bool = false;
 
 
 
@@ -102,10 +102,10 @@ package org.sixsided.scripting.SJS {
         };
 
 
-        public function codegen(src:String = null):Array{
+        public function codegen(src:String = null):Array<Dynamic>{
           if(src) { parse(src); }
           
-          log("##### CODE GENERATION ####\n", JSON.stringify(ast));
+          //log("##### CODE GENERATION ####\n", JSON.stringify(ast));
           
           generated_code = [];
           C(ast);
@@ -121,30 +121,30 @@ package org.sixsided.scripting.SJS {
       *
       ***********************************************************/
 
-      public function dump_node(tree:Object) : String {
-           var ret:Array = [];
+      public function dump_node(tree:Dynamic) : String {
+           var ret:Array<Dynamic> = [];
            
-           function p(s:String) : void {
+           function p(s:String) :Void {
              ret.push(s);
            }
            
-           function pval(v:*) : void {
+           function pval(v:Dynamic) : Void {
              //p(v.value + ':' + typeof v.value);
              p(v.value);
            }
            
 
-           function dnr(n:*) : void {
+           function dnr(n:Dynamic) : Void {
                if(!n) return;
 
-               if(n is Array) {
+               if(Std.is(n,Array)) {
                    p('[');                     // '[' and ']' for arrays, such as argument arrays
-                   var i:int = 0;
-                   for each (var v:* in n) {
+                   var i:Int = 0;
+                   for(v in n) {
                        dnr(v);
                        if(++i < n.length) { p(','); }
                    }
-                   p(']')
+                   p(']');
                } else if( n.hasOwnProperty('first')){               // '(' and ')' around node children
                    p('(');
                    if(n.value == '(') p('CALL'); else if(n.value == '[') p("ARRAY"); else pval(n);
@@ -172,13 +172,13 @@ package org.sixsided.scripting.SJS {
           return generated_code.join(' ');
         };
 
-        private function _annotateVarsWithType(e:*, i:int, a:Array) : String {          
+        private function _annotateVarsWithType(e:Dynamic, i:Int, a:Array<Dynamic>) : String {          
           if(i == 0 || a[i-1] != VM.LIT) {
             return e;  // don't annotate non-literals with type
           }
           
-          if(e is Array) {
-            return "[ " + e.map(_annotateVarsWithType).join(' ') + ' ]'
+          if(Std.is(e,Array)) {
+            return "[ " + e.map(_annotateVarsWithType).join(' ') + ' ]';
           }
           
           return typeof(e) + ':' + e;          
@@ -191,7 +191,7 @@ package org.sixsided.scripting.SJS {
         };
 
     
-      public function log(... msg) : void {
+      public function log(msg:Array<Dynamic>) : Void { //GB this is a varing pramater function; use Reflect.makeVarArgs(log)(1, 2, 3);
           if(tracing) {
             var indent:String = '                                    '.slice(0, xd * 4);
             trace(indent, '[Parser]', msg.join(' '));
@@ -199,27 +199,27 @@ package org.sixsided.scripting.SJS {
       }
       
   
-    public function formattedSyntaxError(t:Object) : String {
-      var nlChar:Object = {"\n":true, "\r":true};
+    public function formattedSyntaxError(t:Dynamic) : String {
+      var nlChar:Dynamic = {"\n":true, "\r":true};
       
-      function line_start(pos:int):int {
+      function line_start(pos:Int):Int {
         while(pos > 0 && !nlChar[source_code.charAt(pos)]) pos--;
         return Math.max(0, pos);
       }
       
-      function line_end(pos:int):int {
-        var z:int = source_code.length - 1;
+      function line_end(pos:Int):Int {
+        var z:Int = source_code.length - 1;
         while(pos < z && !nlChar[source_code.charAt(pos)]) pos++;
         return Math.min(z, pos);
       }
       
-      var a:int = line_start(line_start(t.from) - 1);
-      var z:int = line_end(line_end(t.to) + 1);
+      var a:Int = line_start(line_start(t.from) - 1);
+      var z:Int = line_end(line_end(t.to) + 1);
       
-      const ansi_escape:String = ANSI.RED + ANSI.INVERT;
-      var dupe:String = source_code.substring(0, t.from) + ansi_escape + source_code.substring(t.from, t.to) + ANSI.NORMAL + source_code.substring(t.to);
+      var ansi_escape:String = ANSI.RED_TEXT + ANSI.INVERT_BACKGROUND;//GB was a const
+      var dupe:String = source_code.substring(0, t.from) + ansi_escape + source_code.substring(t.from, t.to) + ANSI.NORMAL_BACKGROUND + source_code.substring(t.to);
             
-      return dupe.substring(a, z+(ansi_escape + ANSI.NORMAL).length);
+      return dupe.substring(a, z+(ansi_escape + ANSI.NORMAL_BACKGROUND).length);
       
     }
       
@@ -233,21 +233,21 @@ package org.sixsided.scripting.SJS {
 
       // reserved words stay reserved -- operators
 
-      public function _extend(a:Object, b:Object) : Object { 
-        for(var k:String in b) {
+      public function _extend(a:Dynamic, b:Dynamic) : Dynamic { 
+        for(k in b) {
           a[k] = b[k];
         } 
         return a;
       }
 
-      public function next(id:String=null) : Object {         
+      public function next(id:String=null) : Dynamic {         
           if(id && token.id != id) {
               log('Parser::next expected to be on "' + id + '" but was on "' + dump_node(token) + '"');
               if(id == ';') throw new Error('missing a semicolon near ' + offending_line(token.from));
               throw new Error('unexpected token, id: `' + token.id + ' value: `' + token.value + "' in next()");
           }
               
-          var pt:Object = token;
+          var pt:Dynamic = token;
           token = tokens[token_idx++];
           
           if(token_idx > tokens.length) return token  = END_TOKEN;
@@ -268,40 +268,40 @@ package org.sixsided.scripting.SJS {
           return _extend(token, symtab[token.id]); // clone FTW.  So what if it might be slow?   handles the this binding simply.
       }
 
-    public function infix_codegen(opcode:*):Function { 
-      return function():void { 
+    public function infix_codegen(opcode:Dynamic):Void->Void { 
+      return function():Void { 
         C(this.first); 
         C(this.second); 
-        emit(opcode); 
+        emit([opcode]); 
       };
     }
 
 
-    public function infix_thunk_rhs_codegen(opcode:*):Function { 
-      return function():void { 
+    public function infix_thunk_rhs_codegen(opcode:Dynamic):Void->Void { 
+      return function():Void { 
         C(this.first);
         // delay evaluation of second child by wrapping it in an array literal
-        emit(VM.LIT);
-        emit(codegen_block(this.second));
-        emit(opcode);
+        emit([VM.LIT]);
+        emit([codegen_block(this.second)]);
+        emit([opcode]);
       };
     }
     
 
-    public function prefix_codegen(opcode:*):Function { 
-      return function():void { C(this.first); emit(opcode); };
+    public function prefix_codegen(opcode:Dynamic):Void->Void  { 
+      return function():Void { C(this.first); emit([opcode]); };
     }
 
 
-    public function symbol(sym:String):Object {
+    public function symbol(sym:String):Dynamic {
       if(!symtab.hasOwnProperty(sym)) symtab[sym] = {};
       return symtab[sym];
     }
 
 
-    public function infix(sym:String, bpow:Number, opcode:*) : Object {
+    public function infix(sym:String, bpow:Float, opcode:Dynamic) : Dynamic {
       
-        function leftDenotation(lhs:Object):Object {
+        function leftDenotation(lhs:Dynamic):Dynamic {
           this.first = lhs;
           this.second = expression(this.bpow);
           return this;          
@@ -313,9 +313,9 @@ package org.sixsided.scripting.SJS {
       };
 
 
-      public function infix_thunk_rhs(sym:String, bpow:Number, opcode:*) : Object {
+      public function infix_thunk_rhs(sym:String, bpow:Float, opcode:Dynamic) : Dynamic {
             return symtab[sym] = {
-                                    led:function(lhs:Object):Object {
+                                    led:function(lhs:Dynamic):Dynamic {
                                             this.first = lhs;
                                             this.second = expression(this.bpow);
                                             return this;
@@ -326,10 +326,10 @@ package org.sixsided.scripting.SJS {
         };
 
 
-    public function prefix(sym:String, bpow:Number, opcode:*) : void { 
-        var s:Object = symbol(sym);
+    public function prefix(sym:String, bpow:Float, opcode:Dynamic) : Void { 
+        var s:Dynamic = symbol(sym);
         s.bpow = s.bpow || 140;  // don't want infix - to get a higher precedence than *, for example.
-        s.nud = function():Object {
+        s.nud = function():Dynamic {
             this.first = expression(0);
             return this;
         };
@@ -337,26 +337,26 @@ package org.sixsided.scripting.SJS {
     }
 
 
-  public function assignment(id:String, bpow:int, operation:String=null) : void {
-        var sym:Object = symbol(id);
+  public function assignment(id:String, bpow:Int, operation:String=null) : Void {
+        var sym:Dynamic = symbol(id);
         sym.bpow = bpow;
       
       
-        var mutate:Boolean = operation ? true : false;    // operation is "+" for +=, "-" for -=, etc; and null for "=". 
+        var mutate:Bool = operation ? true : false;    // operation is "+" for +=, "-" for -=, etc; and null for "=". 
       
-        sym.led = function(lhs:Object):Object {
+        sym.led = function(lhs:Dynamic):Dynamic {
                                     this.first = lhs;
                                     this.second = expression(this.bpow - 1 );  /* drop the bpow by one to be right-associative */
                                     this.assignment = true;
                                     return this;
                                 };
 
-        sym.codegen = function():void {
+        sym.codegen = function():Void {
             if(mutate) {                                    
                 // do the operation     // if it's "x += 3", then...
                 C(this.first);          // LIT x
                 C(this.second);         // VAL 3
-                emit(operation);        // ADD
+                emit([operation]);        // ADD
             } else {
                 // just emit the value   // if it's "x = 3", then:  LIT 3
                 C(this.second);
@@ -372,7 +372,7 @@ package org.sixsided.scripting.SJS {
                 //    VAL point LIT x GETINDEX LIT 3 ADD    VAL point LIT x PUTINDEX
                 remit(VM.PUTINDEX); // PUTINDEX consumes the stack (val obj key)  and does obj[key] = val;
             } else {
-                emit(VM.PUT);
+                emit([VM.PUT]);
             }
             // PUT leaves the value onstack for multiple assignment, DROP it as we come out of the nested assignments
             // need_drop();
@@ -381,15 +381,15 @@ package org.sixsided.scripting.SJS {
     }
 
 
-    public function affix(id:String, bpow:int, opcode:String) : void {
+    public function affix(id:String, bpow:Int, opcode:String) : Void {
        symtab[id] = {
               bpow:bpow,
               isPrefix:false,
-              led:function(lhs:Object) : Object {
+              led:function(lhs:Dynamic) : Dynamic {
                 this.first = lhs;
                 return this;
               },
-              nud:function() : Object {
+              nud:function() : Dynamic {
                 // next must be variable name
                 if(token.id == ID_NAME) {
                   this.first = token;
@@ -400,20 +400,20 @@ package org.sixsided.scripting.SJS {
                   throw new Error("Expected ID_NAME after ++ operator");
                 }
               },
-              codegen:function() : void {
+              codegen:function() : Void {
                 // increment the variable, leaving a copy of its previous value on the stack.
                 if(this.isPrefix) {
                   C(this.first);
-                  emit(VM.LIT, 1, opcode); 
-                  emit(VM.DUP);
+                  emit([VM.LIT, 1, opcode]); 
+                  emit([VM.DUP]);
                   C(this.first, true);
-                  emit(VM.PUT);
+                  emit([VM.PUT]);
                 } else /* postfix */ {
                   C(this.first);
-                  emit(VM.DUP);
-                  emit(VM.LIT, 1, opcode); 
+                  emit([VM.DUP]);
+                  emit([VM.LIT, 1, opcode]); 
                   C(this.first, true);
-                  emit(VM.PUT);
+                  emit([VM.PUT]);
                 }
               }
             };      
@@ -422,30 +422,30 @@ package org.sixsided.scripting.SJS {
        
 
   
-    public function constant(id:String, v:*) : Object {
+    public function constant(id:String, v:Dynamic) : Dynamic {
       return symtab[id] = {
-          nud:function():Object{ 
+          nud:function():Dynamic{ 
             this.value = v;
             return this;
           },
           bpow:0, 
-          codegen:function():void {
+          codegen:function():Void {
                       emit_lit(this.value);
           }
       };
     }
 
 
-    public function expression(rbp:Number):Object {
+    public function expression(rbp:Float):Dynamic {
           xd++;
           // grab first token and call its nud
-          var t:Object = token;
+          var t:Dynamic = token;
           next();
           if(t.nud == undefined) {
             trace(formattedSyntaxError(t));
             throw new SyntaxError("Unexpected " + t.id + " token:  ``" + t.value + "''" + " at char:" + t.from + "-" + t.to + " || line: " + offending_line(t.from));
           }
-          var lhs:Object = t.nud();
+          var lhs:Dynamic = t.nud();
           // shovel left hand side into higher-precedence tokens' methods
           while (rbp < token.bpow){
               t = token;
@@ -459,22 +459,22 @@ package org.sixsided.scripting.SJS {
           return lhs;
       }
                      
-    public function block():Object {
-      var t:Object = token;
+    public function block():Dynamic {
+      var t:Dynamic = token;
       next("{");
       return t.std();
     };
 
       
-    public function statement():Object{
-        var ret:Object, t:Object = token;
+    public function statement():Dynamic{
+        var ret:Dynamic, t:Dynamic = token;
         if(t.std) {
             next();
             ret = t.std();
             return ret;
         }
 
-        var xstmt:Object = expression(0);
+        var xstmt:Dynamic = expression(0);
     
         if(!(xstmt.assignment || xstmt.id == '(')) { 
             throw( new Error('invalid expression statement :' +  offending_line(t.from)) );
@@ -484,9 +484,9 @@ package org.sixsided.scripting.SJS {
     }
           
 
-      public function statements():Array{
-          var stmts:Array = [];
-          for(;;) {
+      public function statements():Array<Dynamic>{
+          var stmts:Array<Dynamic> = [];
+          while(true) {
               if(token.id == '}' || token.id == ID_END) break;
               stmts.push(statement());
           }
@@ -499,62 +499,62 @@ package org.sixsided.scripting.SJS {
     *
     ***********************************************************/
 
-    public function emit1(opcode:*, ...ignore) : void {
-      emit(opcode);
+    public function emit1(opcodes:Array<Dynamic>): Void {//GB prameter was like (opcode:*, ...ignore)
+      emit([opcodes[0]]);
     }
     
-    public function emit(... opcodes) : void {
-      for(var i:int=0; i<opcodes.length;i++){
+    public function emit(opcodes:Array<Dynamic>): Void {
+      for(i in 0...opcodes.length){
           generated_code.push(opcodes[i]);
       }
     }
 
-    public function remit(token:Object):void {
+    public function remit(token:Dynamic):Void {
       generated_code.pop();
-      emit(token);
+      emit([token]);
     }
 
-    public function emit_lit(v:*):void {
-      emit('LIT');
-      emit(v);
+    public function emit_lit(v:Dynamic):Void {
+      emit(['LIT']);
+      emit([v]);
     }
 
-    public function emit_prefix(node:Object, op:*):void {
-      C(node); emit(op);
+    public function emit_prefix(node:Dynamic, op:Dynamic):Void {
+      C(node); emit([op]);
     }
-    public function emit_infix(n1:Object, n2:Object, op:*):void {
-      C(n1); C(n2); emit(op);
+    public function emit_infix(n1:Dynamic, n2:Dynamic, op:Dynamic):Void {
+      C(n1); C(n2); emit([op]);
     }
 
     // usage = j = emit_jump_returning_patcher(VM.JUMPFALSE); ... emit a bunch of stuff ... j();
     // opcodes are:  JUMP|JUMPFALSE <offset>
     // The offset is from the address of JUMPFALSE, not of <offset>
-  public function emit_jump_returning_patcher(opcode:*):Function {
-      emit(opcode);
-      var here:int = generated_code.length;
-      function patcher():void { 
+  public function emit_jump_returning_patcher(opcode:Dynamic):Void->Void {
+      emit([opcode]);
+      var here:Int = generated_code.length;
+      function patcher():Void { 
         generated_code[here] = generated_code.length - here - 1; // decrement to factor in the <offset> literal
       }
-      emit('@patch'); // placeholder @here
+      emit(['@patch']); // placeholder @here
       return patcher;
   }
           
           
-  public function backjumper(opcode:*):Function {
+  public function backjumper(opcode:Dynamic):Void->Void {
       // opcodes emitted:  JUMP|JUMPFALSE <offset>
       // currently uses only JUMP, but will need JUMPFALSE to support "do { ... } while(test)" semantics    (TBD)
-      var here:int = generated_code.length;
-      return function():void { 
-        emit(opcode);
-        var offset:int = here - generated_code.length - 1; // decrement to factor in the <offset> literal
-        emit(offset);
+      var here:Int = generated_code.length;
+      return function():Void { 
+        emit([opcode]);
+        var offset:Int = here - generated_code.length - 1; // decrement to factor in the <offset> literal
+        emit([offset]);
       }
   }
           
-    // public var drops_needed:int = 0;                 // fixme: this seems really incorrect.  take multiple assignment out?
-    // public function need_drop():void { drops_needed++; }  // see assignment()  ^^^... no, make codegen return and concat arrays recursively
+    // public var drops_needed:Int = 0;                 // fixme: this seems really incorrect.  take multiple assignment out?
+    // public function need_drop():Void { drops_needed++; }  // see assignment()  ^^^... no, make codegen return and concat arrays recursively
     
-    public function C(node:Object, is_lhs:Boolean=false):void {  
+    public function C(node:Dynamic, is_lhs:Bool=false):Void {  
       if(!node) {
         trace('empty node reached');
         return;
@@ -562,8 +562,8 @@ package org.sixsided.scripting.SJS {
  
       // TODO: if multiple assignment: MARK .. C ... CLEARTOMARK
       
-       if(node is Array) { // statements or argument lists
-        for(var i:int=0;i<node.length;i++) {
+       if(Std.is(node, Array)) { // statements or argument lists
+        for(i in 0...node.length) {
             C(node[i], is_lhs);
             /*emit(VM.DROPALL);*/
             // we might need to drop some leftover values from a multiple assignment
@@ -584,26 +584,26 @@ package org.sixsided.scripting.SJS {
     
     
     // for code like " a { b c } d  ", return [a, [b, c], d]
-    public function codegen_block(node:Object):*{
-      var orig_code:Array = generated_code;
+    public function codegen_block(node:Dynamic):Dynamic{
+      var orig_code:Array<Dynamic> = generated_code;
       generated_code = [];
       C(node);
-      var block_code:Array = generated_code;
+      var block_code:Array<Dynamic> = generated_code;
       generated_code = orig_code;
       return block_code;
     }
     
 
-    public function C_hash(o:Object):void{
-      for(var k:String in o) {
-        emit('LIT', k);
+    public function C_hash(o:Dynamic):Void{
+      for(k in o) {
+        emit(['LIT', k]);
         C(o[k]);
       }
     }
 
 
   // scope handling stuff at present only exists to prevent name collisions at parse time.
-     public function scope_define(name:String):void {
+     public function scope_define(name:String):Void {
         // used by: function, var
 /*        log('scope_define', name);*/
 // allow redefinition so we can say function x() {...} repeatedly during dev
@@ -614,16 +614,16 @@ package org.sixsided.scripting.SJS {
         // }
         scopes[0].push(name); // FIXME, throw an error if it's already defined 
       }
-      public  function scope_push():void {
+      public  function scope_push():Void {
         scopes.unshift([]);
       }
-      public function scope_pop():void {
+      public function scope_pop():Void {
         scopes.shift();
       }
       
 
-    public function parse_argument_list():Array {
-        var args:Array = [];
+    public function parse_argument_list():Array<Dynamic> {
+        var args:Array<Dynamic> = [];
         
         if(token.id == ')') return args;  // bail if args list is empty; caller is responsible for consuming )
         
@@ -637,12 +637,12 @@ package org.sixsided.scripting.SJS {
         return args;
     }    
     
-    public var getAnonFuncName_id:int = 0;
+    public var getAnonFuncName_id:Int = 0;
     public function getAnonFuncName():String {
       return 'anon' + getAnonFuncName_id++;
     }
       
-    public function init_symbols():void {
+    public function init_symbols():Void {
 
       //constants
       constant('true', true);
@@ -650,16 +650,16 @@ package org.sixsided.scripting.SJS {
 
       //primitives
       symtab[ID_NAME] = {
-          nud:function():Object {return this;},
+          nud:function():Dynamic {return this;},
           toString:function():String {return this.value;},
-          codegen:function(am_lhs:Boolean):void {  emit(am_lhs ? 'LIT' : 'VAL',  this.value); }  // need a reference if we're assigning to the var; the value otherwise.
+          codegen:function(am_lhs:Bool):Void {  emit([am_lhs ? 'LIT' : 'VAL',  this.value]); }  // need a reference if we're assigning to the var; the value otherwise.
       };
 
       symtab[ID_LITERAL] = {
-          nud:function():Object {return this;},
+          nud:function():Dynamic {return this;},
           toString:function():String{return this.value;},
           bpow:0,
-          codegen:function():void { 
+          codegen:function():Void { 
             emit_lit(this.value); 
           } // tbd test w/ lexer change to parse numbers
       };
@@ -683,7 +683,7 @@ package org.sixsided.scripting.SJS {
       prefix('-', 120, '*unary minus*');
 
       // tbd: different codegens by arity?
-      symtab['-'].codegen = function():void { 
+      symtab['-'].codegen = function():Void { 
           if(this.second) 
           emit_infix(this.first, this.second, VM.SUB);
           else {
@@ -714,20 +714,20 @@ package org.sixsided.scripting.SJS {
        // RHS [k(1) dot... k(n-1) dot] dict k(n) put
        // where dot has stack effect ( o k -- o[k] )
        // a.b.c.d = e -- $ e $a # b dot # c dot # d dot dict 
-       symtab['.'].codegen = function(is_lhs:Boolean /* assignment? */):void {
+       symtab['.'].codegen = function(is_lhs:Bool /* assignment? */):Void {
            if(this.first.id != '.') {
                C(this.first, false); // use VAL
            } else {
                C(this.first, true);  // use LIT
            }
            C(this.second, true); // treat as LHS until the last item in the dot-chain
-           emit(VM.GETINDEX);
+           emit([VM.GETINDEX]);
        };
             
             
     symbol('new');
     symbol('new').bpow = 160;
-    symbol('new').nud = function():Object {
+    symbol('new').nud = function():Dynamic {
         if(token.type != T_NAME) throw("Expected name after new operator, got " + token.value + " in: " + offending_line());
         this.first = token;
         next(/*constructor*/);
@@ -736,12 +736,12 @@ package org.sixsided.scripting.SJS {
         next(')');
         return this;
     };
-    symbol('new').codegen = function():void {
+    symbol('new').codegen = function():Void {
         emit_lit(this.first.value);
-        emit(VM.MARK);
+        emit([VM.MARK]);
         C(this.second);
-        emit(VM.ARRAY);
-        emit(VM.NATIVE_NEW);   // ( constructor [args] -- instance )
+        emit([VM.ARRAY]);
+        emit([VM.NATIVE_NEW]);   // ( constructor [args] -- instance )
     };
     
 
@@ -751,14 +751,14 @@ package org.sixsided.scripting.SJS {
             isFunctionCall:false,
 
             // subexpression
-            nud:function():Object{
-                var expr:Object = expression(0);
+            nud:function():Dynamic{
+                var expr:Dynamic = expression(0);
                 next(')');
                 return expr;
             },
   
             // function call
-            led:function(lhs:Object):Object{
+            led:function(lhs:Dynamic):Dynamic{
                 this.first = lhs;
                 // will be on '('
                 this.second = parse_argument_list();
@@ -767,22 +767,22 @@ package org.sixsided.scripting.SJS {
                 return this;
             },
         
-            codegen:function():void {
+            codegen:function():Void {
               /*// recurse and find "..." async in argument list?
               //whatabout f(..., f2(...))
               // : translates to await f(resumeLastAwait, await f2(resumeLastAwait))
               //
-              function isEllipsis(arg:Object, i:int, a:Array):Boolean {
+              function isEllipsis(arg:Object, i:Int, a:Array):Bool {
                 return arg.id == '...';
               }*/
               
-              /*var isAsync:Boolean = this.second.some(isEllipsis);*/
+              /*var isAsync:Bool = this.second.some(isEllipsis);*/
 
               C(this.first);
-              emit(VM.MARK);
+              emit([VM.MARK]);
               C(this.second);
-              emit(VM.ARRAY);
-              emit(VM.CALL);
+              emit([VM.ARRAY]);
+              emit([VM.CALL]);
 
               /*if(this.second.some(isEllipsis)) {
                 emit(VM.AWAIT);
@@ -795,9 +795,9 @@ package org.sixsided.scripting.SJS {
 
 
       symtab['function'] = {
-        std:function():Object {
-            var fn_name:Object = token;
-            var args:Array = [];
+        std:function():Dynamic {
+            var fn_name:Dynamic = token;
+            var args:Array<Dynamic> = [];
             next(/* skip the function name */);
       
             if(fn_name.type != T_NAME) { throw("Invalid function name '" + fn_name.value + "' on line: " + offending_line()); }
@@ -811,7 +811,7 @@ package org.sixsided.scripting.SJS {
             }
             next(')');
             next('{');
-            var body:Array = statements();
+            var body:Array<Dynamic> = statements();
             next('}');
       
             scope_pop();
@@ -825,10 +825,10 @@ package org.sixsided.scripting.SJS {
         },
         
        
-        nud:function():Object {
-          var args:Array = [];
+        nud:function():Dynamic {
+          var args:Array<Dynamic> = [];
           // we need to create a fake function-name token for this anonymous function
-          var fn_name:Object = {
+          var fn_name:Dynamic = {
             id: ID_NAME,
             type: T_NAME,
             value: getAnonFuncName(),
@@ -844,7 +844,7 @@ package org.sixsided.scripting.SJS {
   
           next(')');
           next('{');
-          var body:Array = statements();
+          var body:Array<Dynamic> = statements();
             //trace('function nud:', Inspector.inspect(body));
           next('}');
 
@@ -859,7 +859,7 @@ package org.sixsided.scripting.SJS {
 
         bpow:0,
         
-        codegen:function():void {
+        codegen:function():Void {
           /* generates: 
             LIT "function_name"               
             MARK   
@@ -886,30 +886,30 @@ package org.sixsided.scripting.SJS {
           emit_lit(this.first.value);
           
           // arguments
-          emit(VM.MARK);
+          emit([VM.MARK]);
           C(this.second, true);
-          emit(VM.ARRAY);
+          emit([VM.ARRAY]);
           
           // tbd: fix this hack to create locals at the beginning of a function's code block
-          var body:Array = codegen_block(this.third);
-          for each(var v:* in this.scope) { body.unshift(VM.LOCAL); body.unshift(v); body.unshift(VM.LIT); }
+          var body:Array<Dynamic> = codegen_block(this.third);
+          for(v in this.scope) { body.unshift(VM.LOCAL); body.unshift(v); body.unshift(VM.LIT); }
 
-          emit(VM.LIT);
+          emit([VM.LIT]);
           
-          emit(body);
+          emit([body]);
           
           //emit(VM.MARK); emit(VM.EVAL_OFF); body.forEach(emit1); emit(VM.EVAL_ON); emit(VM.ARRAY);  // not the greatest idea
-          emit(VM.CLOSURE);
+          emit([VM.CLOSURE]);
           if(!this.first.isAnonymous) {
             /*trace('emitting drop for named function codegen');*/
-            emit(VM.DROP); // anon function will presumably be assigned to something... although, wait, this kills the module pattern: (function(){...})()
+            emit([VM.DROP]); // anon function will presumably be assigned to something... although, wait, this kills the module pattern: (function(){...})()
           }
         }     
       };
 
       symtab['return'] = {
           bpow:0,
-          std:function():Object {            
+          std:function():Dynamic {            
               // peek at next token to see if this is "return;" as opposed to "return someValue;"
               if(token.id != ';') {
                 this.first = expression(0);
@@ -917,20 +917,20 @@ package org.sixsided.scripting.SJS {
               next(';');
               return this;
           },
-          codegen:function():void {
+          codegen:function():Void {
                    C(this.first);
-                   emit(VM.RETURN);
+                   emit([VM.RETURN]);
               }
       };
 
       symtab['['] = {      
         
           // x = [1,2,3]
-          nud:function():Object {
-              var a:Array = [];
+          nud:function():Dynamic {
+              var a:Array<Dynamic> = [];
               
               if(token.id != ']') {
-                for(;;){
+                while(true){
                   a.push(expression(0));
                   if(token.id != ',') break;
                   next(',');
@@ -944,7 +944,7 @@ package org.sixsided.scripting.SJS {
           },
           
           // x = y[z]
-          led:function(lhs:Object):Object{
+          led:function(lhs:Dynamic):Dynamic{
               this.first = lhs;  // "y"
               // will be on '['
               this.second = expression(0); // "z"
@@ -957,15 +957,15 @@ package org.sixsided.scripting.SJS {
           
           toString:function():String { return "(array " + this.first + ")"; },
           bpow:160,
-          codegen:function(is_lhs:Boolean = false):void { 
+          codegen:function(is_lhs:Bool = false):Void { 
             if(this.subscripting) {
               //this.first could be a variable name or a literal array, e.g.  [1,2,3][0];  getArray()[0]
               //we want to throw whatever it is on the stack, then getIndex it.
               C(this.first, false); // use VAL, in "x = y[z]", we want the value of y on the stack
               C(this.second, false); // treat as RHS...      // FIXME: a[i] = n fails by using PUTINDEX
-              emit(is_lhs ? VM.PUTINDEX : VM.GETINDEX);
+              emit([is_lhs ? VM.PUTINDEX : VM.GETINDEX]);
             } else {
-              emit('MARK'); C(this.first); emit('ARRAY');
+              emit(['MARK']); C(this.first); emit(['ARRAY']);
             }
           }
 
@@ -973,14 +973,14 @@ package org.sixsided.scripting.SJS {
 
 
       symtab['{'] = { 
-         std:function():Object { 
-           var a:Array = statements();
+         std:function():Dynamic { 
+           var a:Array<Dynamic> = statements();
            next('}');
            return a;
          }, 
-         nud:function():Object {
-            var key:Object, value:Object, obj:Object = {};
-            for(;;) {
+         nud:function():Dynamic {
+            var key:Dynamic, value:Dynamic, obj:Dynamic = {};
+            while(true) {
               key = token;
               next();
               next(':');
@@ -994,7 +994,7 @@ package org.sixsided.scripting.SJS {
             this.first = obj;
             return this;
          },
-         codegen:function():void { emit('MARK'); C_hash(this.first);  emit('HASH'); }
+         codegen:function():Void { emit(['MARK']); C_hash(this.first);  emit(['HASH']); }
       };
 
     /***********************************************************
@@ -1005,12 +1005,12 @@ package org.sixsided.scripting.SJS {
 
 
       symtab['if'] = {
-          std:function():Object {
+          std:function():Dynamic {
               next('(');
-              var cond:Object = expression(0);
+              var cond:Dynamic = expression(0);
               next(')');
               next('{');
-              var then_block:Array = statements();
+              var then_block:Array<Dynamic> = statements();
               next('}');
               this.first = cond;
               this.second = then_block;
@@ -1018,7 +1018,7 @@ package org.sixsided.scripting.SJS {
               // trace(token);
               if(token.id == ID_NAME && token.value == 'else') {
                 next(); // skip else
-                var t:Object = token;
+                var t:Dynamic = token;
                 this.third = t.value == 'if' ? statement() : block( /* eats  { and } */);
                 // what if the next statement's another if?
               }
@@ -1026,7 +1026,7 @@ package org.sixsided.scripting.SJS {
           },
           bpow:0,
 
-          codegen:function():void {
+          codegen:function():Void {
               C(this.first); // test
           
               var patch_if:Function = emit_jump_returning_patcher(VM.JUMPFALSE);
@@ -1043,19 +1043,19 @@ package org.sixsided.scripting.SJS {
       };
 
       symtab['while'] = {
-          std:function():Object {
+          std:function():Dynamic {
               next('(');
-              var cond:Object = expression(0);
+              var cond:Dynamic = expression(0);
               next(')');
               next('{');
-              var block:Array = statements();
+              var block:Array<Dynamic> = statements();
               next('}');
               this.first = cond;
               this.second = block;
               return this;
           },
           bpow:0,
-          codegen:function():void {
+          codegen:function():Void {
               var emit_backjump_to_test:Function = backjumper(VM.JUMP);
               C(this.first);
               var patch_jump_over_body:Function = emit_jump_returning_patcher(VM.JUMPFALSE);
@@ -1067,17 +1067,17 @@ package org.sixsided.scripting.SJS {
 
 
       symtab['for'] = {
-          std:function():Object {
+          std:function():Dynamic {
            // for (initial-expr ; test-expr ; final-expr ) { body }
            next('(');
-           var init:Object = expression(0);
+           var init:Dynamic = expression(0);
            next(';');
-           var test:Object = expression(0);
+           var test:Dynamic = expression(0);
            next(';');
-           var modify:Object = expression(0);
+           var modify:Dynamic = expression(0);
            next(')');
            next('{');
-           var block:Array = statements();
+           var block:Array<Dynamic> = statements();
            next('}');
            this.first = [init,test,modify];
            this.second = block;
@@ -1086,7 +1086,7 @@ package org.sixsided.scripting.SJS {
           },
           bpow:0,
                                                         // "for(i = 0; i < 10; i++) { trace(i); }"
-          codegen:function():void{
+          codegen:function():Void{
               C(this.first[0]);                         // i = 0
               var backjump_to_test:Function = backjumper(VM.JUMP);
               C(this.first[1]);                         // i < 10
@@ -1100,10 +1100,10 @@ package org.sixsided.scripting.SJS {
 
 
       symtab['var'] = {
-          std:function():Object {
+          std:function():Dynamic {
 /*            trace('* var statement');*/
-              var e:Object, names:Array = [];
-              for(;;){
+              var e:Dynamic, names:Array<Dynamic> = [];
+              while(true){
                   e = expression(0);
                   if(e.id != '=' && e.id != ID_NAME) { 
                       throw new Error('Unexpected intializer ' + e + ' in var statement :' + offending_line(this.from));
@@ -1125,7 +1125,7 @@ package org.sixsided.scripting.SJS {
           toString:function():String {
               return '(var '+ this.first + ')';
           },
-          codegen:function():void{            
+          codegen:function():Void{            
             /*            trace("var codegen doesn't do anything; it's just a marker.");*/
             /* TODO: codegen should prefix locals with LOCAL opcode(TBD) */
             C(this.first, true);
@@ -1145,33 +1145,33 @@ package org.sixsided.scripting.SJS {
         
         isStatement : false, 
         
-        expectFunctionCall:function():void {
+        expectFunctionCall:function():Void {
             if(!this.first.isFunctionCall) throw "Expected function call after await";
         },
         
-        std:function():Object {
+        std:function():Dynamic {
           this.isStatement = true;
           this.first = statement();
           this.expectFunctionCall();
           return this;
         },
         
-        nud:function():Object {
+        nud:function():Dynamic {
           this.first = expression(0);
           this.expectFunctionCall();
           return this;
         },
         
-        codegen:function():void {
-          if(this.isStatement) emit(VM.MARK)
-          C(this.first);  // There should be an async method call somewhere in this subtree, 
+        codegen:function():Void {
+			if (this.isStatement) emit([VM.MARK]);
+			C(this.first);  // There should be an async method call somewhere in this subtree, 
                           // which will leave a Promise on the stack.
                          
-          emit(VM.AWAIT); // AWAIT will then consume the Promise; its fulfillment will resume the VM
+			emit([VM.AWAIT]); // AWAIT will then consume the Promise; its fulfillment will resume the VM
                           // with one value on the stack.
                           // if (this.first) consumed it, fine; in case it hasn't, clear to the mark:
                           
-          if(this.isStatement) emit(VM.CLEARTOMARK);
+          if(this.isStatement) emit([VM.CLEARTOMARK]);
         }
       }
 
@@ -1180,19 +1180,33 @@ package org.sixsided.scripting.SJS {
     }
 
      // return the text of the source-code line containing a given character offset (which offset we originally got from the lexer)
-     public function offending_line(near:int=-1):String {
-       var line_start:int, line_end:int;
-       var nlChar:Object = {"\n":true, "\r":true};
+     public function offending_line(near:Int=-1):String {
+       var line_start:Int, line_end:Int;
+       var nlChar:Dynamic = {"\n":true, "\r":true};
        if(near<0) near = token.from;
        // back up to the start of the line
-       for(line_start = near; line_start >= 0 && !nlChar[source_code.charAt(line_start)]; line_start--)
-          /* ok */ true;
+	   
+       //for(line_start = near; line_start >= 0 && !nlChar[source_code.charAt(line_start)]; line_start--)
+       //   /* ok */ true;
+	   
+	   line_start = near;
+	   while (line_start >= 0 && !nlChar[source_code.charAt(line_start)]) {
+			line_start--;
+		}
+	   
        // walk forward to the end of the line
-       for(line_end = near; line_end < source_code.length && !nlChar[source_code.charAt(line_end)]; line_end++)
-          /* ok */ true;
+       //for(line_end = near; line_end < source_code.length && !nlChar[source_code.charAt(line_end)]; line_end++)
+       //   /* ok */ true;
+	   
+	   line_end = near;
+	   while (line_end < source_code.length && !nlChar[source_code.charAt(line_end)]) {
+			line_end++;
+		}
+	   
+	   
        return source_code.substring(line_start,line_end);
      }
 
 
   } // class        
-}
+

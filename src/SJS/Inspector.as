@@ -1,4 +1,4 @@
-package org.sixsided.scripting.SJS {
+package SJS {
   import flash.display.DisplayObjectContainer;
   import flash.display.DisplayObject;
   import flash.utils.getQualifiedClassName;
