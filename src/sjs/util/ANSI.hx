@@ -1,4 +1,4 @@
-package sjs;
+package sjs.util;
 
 	/**
 	 * ...

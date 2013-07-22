@@ -10,15 +10,16 @@ Notes to self:
 
 */
 
-package SJS {
-  import SJS.Inspector;
+package sjs;
+  import sjs.Inspector;
   import flash.utils.getDefinitionByName;
   import flash.utils.getQualifiedClassName;
  
   import flash.geom.*;
   import flash.display.*;
+  
   //import Promise;
-  import SJS.ANSI;  
+  import sjs.util.ANSI;
 
   import flash.events.Event;
   import flash.events.EventDispatcher;
@@ -643,5 +644,4 @@ package SJS {
         }
         
     } // VM
-  
-} // package
+ 

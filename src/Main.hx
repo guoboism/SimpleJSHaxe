@@ -5,10 +5,12 @@ import flash.display.StageAlign;
 import flash.display.StageScaleMode;
 import flash.events.Event;
 import flash.display.Stage;
+import flash.Lib;
 import flash.text.TextField;
 import flash.text.TextFormat;
+import sjs.data.Token;
 
-import sjs.ANSI;
+import sjs.util.ANSI;
 import sjs.Lexer;
 import sjs.Parser;
 
@@ -49,14 +51,21 @@ class Main extends Sprite
 		
 		var tf:TextField = new TextField();
 		addChild(tf);
-		
 		var format = new TextFormat("Katamotz Ikasi", 30, 0x7A0026);
 		tf.setTextFormat(format);
+		tf.text = "Hello World";
 		
-		tf.text = "setsasdf";
 		
-		var res:Array<Dynamic> = Lexer.tokenize("var s = 0; s = s + 100;");
-		trace(res.join("\r"));
+		//
+		var startTime;
+		startTime = Lib.getTimer();
+		
+		for(i in 0...1000000){
+			var res:Array<Token> = Lexer.tokenize("var s = 0; s = s + 100;");
+		}
+		trace((Lib.getTimer() - startTime) / 1000);
+		
+		//0.873
 		
 		// Stage:
 		// stage.stageWidth x stage.stageHeight @ stage.dpiScale

@@ -1,4 +1,5 @@
 package sjs;
+import sjs.data.Token;
 
   // tokens.js
   // 2007-08-05
@@ -26,31 +27,17 @@ package sjs;
 
 class Lexer {
 
+	private static var from:Int = 0;// The index of the start of the token.
+	private static var i:Int = 0;// The index of the current character.
 
-	public static function tokenize(src:String, prefix:String='=<>!+-*&|/%^', suffix:String='=<>&|+-'):Array<Dynamic> {
+	public static function tokenize(src:String, prefix:String='=<>!+-*&|/%^', suffix:String='=<>&|+-'):Array<Token> {
 		
 		var c:Dynamic;                      // The current character.
-		var from:Int = 0;//GB add init as 0                 // The index of the start of the token.
-		var i:Int = 0;                  // The index of the current character.
 		var length:Int = src.length;
 		var n:Dynamic;                      // The number value.
 		var q:String;                      // The quote character.
 		var str:String;                    // The string value.
-
-		var result:Array<Dynamic> = [];            // An array to hold the results.
-
-		var make:String->Dynamic->Dynamic = function(type:String, value:Dynamic):Dynamic {
-
-		// Make a token object.
-		if(type == 'number') value = Std.parseFloat(value);
-			return {
-				type: type,
-				value: value,
-				from: from,
-				to: i,
-				error:function(msg:String):Void { throw(msg); }
-			};
-		};
+		var result:Array<Token> = [];            // An array to hold the results.
 
 		// Begin tokenization. If the source string is empty, return nothing.
 
@@ -58,29 +45,19 @@ class Lexer {
 			return null;
 		}
 
-		/*    // If prefix and suffix strings are not provided, supply defaults.
-
-			if (typeof prefix !== 'string') {
-				prefix = '=<>!+-*&|/%^';
-			}
-			if (typeof suffix !== 'string') {
-				suffix = '=<>&|';
-			}
-		*/
 		// Loop through src text, one character at a time.
 
 		c = src.charAt(i);
 		while (c) {
 			from = i;
 
-		// Ignore whitespace.
+			//whitespace,  ignore
+			if (c <= ' ') {
+				i += 1;
+				c = src.charAt(i);
 
-		if (c <= ' ') {
-			i += 1;
-			c = src.charAt(i);
-
-		// name.
-
+				
+			// name.
 			} else if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_') {
 				str = c;
 				i += 1;
@@ -94,19 +71,17 @@ class Lexer {
 						break;
 					}
 				}
-				result.push(make('name', str));
+				result.push(make(TName, str));
 
-	// number.
-
-	// A number cannot start with a decimal point. It must start with a digit,
-	// possibly '0'.
-
+				
+			// number.
+			// A number cannot start with a decimal point. It must start with a digit,
+			// possibly '0'.
 			} else if (c >= '0' && c <= '9') {
 				str = c;
 				i += 1;
-
-	// Look for more digits.
-
+				
+				// Look for more digits.
 				// hex number?
 				if(src.charAt(i) == 'x') {
 					str = '';
@@ -120,15 +95,17 @@ class Lexer {
 						i += 1;
 						str += c;
 					}
+					
 					n = Std.parseInt(str);//GB: orignal code forces parse into hex
 					if (Math.isFinite(n)) {
-						result.push(make('number', n));
+						result.push(make(TNumber, n));
 					} else {
-						make('number', str).error("Bad hex number");
+						make(TNumber, str).error("Bad hex number");
 					}
+					
+				//regular number
 				} else {
-					//regular number
-				
+					
 					while(true){
 						c = src.charAt(i);
 						if (c < '0' || c > '9') {
@@ -138,86 +115,82 @@ class Lexer {
 						str += c;
 					}
 
-		// Look for a decimal fraction part.
-
-					if (c == '.') {
+				// Look for a decimal fraction part.
+				if (c == '.') {
+					i += 1;
+					str += c;
+					while(true) {
+						c = src.charAt(i);                        
+						if (c < '0' || c > '9') {
+							break;
+						}
 						i += 1;
 						str += c;
-						while(true) {
-							c = src.charAt(i);                        
-							if (c < '0' || c > '9') {
-								break;
-							}
-							i += 1;
-							str += c;
-						}
 					}
+				}
 
-		// Look for an exponent part.
-
-					if (c == 'e' || c == 'E') {
+				// Look for an exponent part.
+				if (c == 'e' || c == 'E') {
+					i += 1;
+					str += c;
+					c = src.charAt(i);
+					if (c == '-' || c == '+') {
+						i += 1;
+						str += c;
+					}
+					if (c < '0' || c > '9') {
+						make(TNumber, str).error("Bad exponent");
+					}
+					do {
 						i += 1;
 						str += c;
 						c = src.charAt(i);
-						if (c == '-' || c == '+') {
-							i += 1;
-							str += c;
-						}
-						if (c < '0' || c > '9') {
-							make('number', str).error("Bad exponent");
-						}
-						do {
-							i += 1;
-							str += c;
-							c = src.charAt(i);
-						} while (c >= '0' && c <= '9');
-					}
+					} while (c >= '0' && c <= '9');
+				}
 
-		// Make sure the next character is not a letter.
+				// Make sure the next character is not a letter.
+				if (c >= 'a' && c <= 'z') {
+					str += c;
+					i += 1;
+					make(TNumber, str).error("Bad number");
+				}
 
-					if (c >= 'a' && c <= 'z') {
-						str += c;
-						i += 1;
-						make('number', str).error("Bad number");
-					}
+				// Convert the string value to a number. If it is finite, then it is a good
+				// token.
 
-		// Convert the string value to a number. If it is finite, then it is a good
-		// token.
+				n = Std.parseFloat(str);  // was +str
+				if (Math.isFinite(n)) {
+					result.push(make(TNumber, n));
+				} else {
+					make(TNumber, str).error("Bad number");
+				}
+				
+			} // hex / regular number
 
-					n = Std.parseFloat(str);  // was +str
-					if (Math.isFinite(n)) {
-						result.push(make('number', n));
-					} else {
-						make('number', str).error("Bad number");
-					}
-				} // hex / regular number
+		// string
+		} else if (c == '\'' || c == '"') {
+			str = '';
+			q = c;
+			i += 1;
+			while(true) {
+				c = src.charAt(i);
+				if (c < ' ') {
+					//GB old //make('string', str).error(c == '\n' || c == '\r' || c == '' ?"Unterminated string." : "Control character in string.", make('', str));
+					make(TString, str).error(c == '\n' || c == '\r' || c == '' ? "Unterminated string." : "Control character in string.");
+				}
 
-	// string
+				// Look for the closing quote.
 
-			} else if (c == '\'' || c == '"') {
-				str = '';
-				q = c;
-				i += 1;
-				while(true) {
-					c = src.charAt(i);
-					if (c < ' ') {
-						make('string', str).error(c == '\n' || c == '\r' || c == '' ?
-							"Unterminated string." :
-							"Control character in string.", make('', str));
-					}
+				if (c == q) {
+					break;
+				}
 
-	// Look for the closing quote.
-
-					if (c == q) {
-						break;
-					}
-
-	// Look for escapement.
+				// Look for escapement.
 
 					if (c == '\\') {
 						i += 1;
 						if (i >= length) {
-							make('string', str).error("Unterminated string");
+							make(TString, str).error("Unterminated string");
 						}
 						c = src.charAt(i);
 						switch (c) {
@@ -238,11 +211,11 @@ class Lexer {
 							break;
 						case 'u':
 							if (i >= length) {
-								make('string', str).error("Unterminated string");
+								make(TString, str).error("Unterminated string");
 							}
 							c = Std.parseInt(src.substr(i + 1, 4));//GB original force to hex
 							if (!Math.isFinite(c) || c < 0) {
-								make('string', str).error("Unterminated string");
+								make(TString, str).error("Unterminated string");
 							}
 							c = String.fromCharCode(c);
 							i += 4;
@@ -253,10 +226,10 @@ class Lexer {
 					i += 1;
 				}
 				i += 1;
-				result.push(make('string', str));
+				result.push(make(TString, str));
 				c = src.charAt(i);
 
-	// comment.
+			// comment.
 
 			} else if (c == '/' && src.charAt(i + 1) == '/') {
 				i += 1;
@@ -268,7 +241,7 @@ class Lexer {
 					i += 1;
 				}
 
-	// combining
+			// combining
 
 			} else if (prefix.indexOf(c) >= 0) {
 				str = c;
@@ -281,17 +254,25 @@ class Lexer {
 					str += c;
 					i += 1;
 				}
-				result.push(make('operator', str));
+				result.push(make(TOperator, str));
 
-	// single-character operator
+			// single-character operator
 
 			} else {
 				i += 1;
-				result.push(make('operator', c));
+				result.push(make(TOperator, c));
 				c = src.charAt(i);
 			}
 		}
 		return result;
+	}
+	
+	static function make(type:TokenType, value:Dynamic):Token {
+
+		// Make a token object.
+		if(type == TNumber) value = Std.parseFloat(value);
+		
+		return new Token(type, value, from, i);
 	}
 
 }
