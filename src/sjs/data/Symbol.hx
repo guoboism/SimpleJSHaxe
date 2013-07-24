@@ -4,10 +4,11 @@ package sjs.data;
  * ...
  * @author Guobo
  */
-class Symbol
+class Symbol extends Token
 {
 
 	
+	public var id:String;
 	
 	public var led:Dynamic->Dynamic;
 	
@@ -29,13 +30,18 @@ class Symbol
 	
 	public function new(?led_:Dynamic->Dynamic,?nud_:Void->Dynamic,?std_:Void->Dynamic,?bpow_:Int) 
 	{
-		
+		super();
 		
 		isPrefix = false;
 		
 		//{nud, led, std, bpow, codegen } associated with an id
-		
-		
+	}
+	
+	public function extendFromToken(t:Token):Void {
+		value = t.value;
+		type = t.type;
+		from = t.from;
+		to = t.to;
 	}
 	
 }

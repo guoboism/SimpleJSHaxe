@@ -53,7 +53,7 @@ package sjs;
 	public var symtab:Map<String,Symbol>;
 	public var scopes:Array<Dynamic>; // just names //GB was = [[]]
 	public var tokens:Array<Token>;
-	public var token:Dynamic = null;
+	public var token:Symbol = null;//GB is it a type token and symbol at different time? 
 	public var token_idx:Int = 0;
 	public var source_code:String;
 	public var generated_code:Array<Dynamic>;
@@ -204,17 +204,21 @@ package sjs;
       
   
 	public function formattedSyntaxError(t:Dynamic) : String {
-		var nlChar:Dynamic = {"\n":true, "\r":true};
-  
+		
+		var nlCharTable:Map<String,Bool> = new Map<String,Bool>();
+		nlCharTable["\n"] = true;
+		nlCharTable["\r"] = true;
+		
+		
 		function line_start(pos:Int):Int {
-			while(pos > 0 && !nlChar[source_code.charAt(pos)]) pos--;
-			return Math.max(0, pos);
+			while(pos > 0 && !nlCharTable[source_code.charAt(pos)]) pos--;
+			return 0 > pos?0:pos;//GB max
 		}
 		  
 		function line_end(pos:Int):Int {
 			var z:Int = source_code.length - 1;
-			while(pos < z && !nlChar[source_code.charAt(pos)]) pos++;
-			return Math.min(z, pos);
+			while(pos < z && !nlCharTable[source_code.charAt(pos)]) pos++;
+			return z < pos?z:pos;//min
 		}
 		  
 		var a:Int = line_start(line_start(t.from) - 1);
@@ -234,9 +238,10 @@ package sjs;
     *    PARSER CORE
     *
     ***********************************************************/
-
+	
+	//GB used to "extend" a token to symbol, not useless
     // reserved words stay reserved -- operators
-
+	/*
     public function _extend(a:Dynamic, b:Dynamic) : Dynamic {
 		var fields:Array<String> = Reflect.fields(b);
         for (k in fields) {
@@ -244,35 +249,39 @@ package sjs;
           a[k] = b[k];
         }
         return a;
-    }
+    }*/
 
-    public function next(id:String=null) : Dynamic {         
+    public function next(id:String=null) : Symbol {         
         if(id != null && token.id != id) {
             log(['Parser::next expected to be on "' + id + '" but was on "' + dump_node(token) + '"']);
             if(id == ';') throw 'missing a semicolon near ' + offending_line(token.from);
             throw 'unexpected token, id: `' + token.id + ' value: `' + token.value + "' in next()";
         }
           
-        var pt:Dynamic = token;
-        token = tokens[token_idx++];
+        //var pt:Dynamic = token; //GB commented as unesed
+        token = new Symbol();
+		token.extendFromToken(tokens[token_idx++]);
           
         if(token_idx > tokens.length) return token  = getEndToken();
 
-        if(token.type == 'name') {
+        if(token.type == TName) {
             if(symtab.exists(token.value)) {
                 token.id = token.value;
             } else {
                 token.id = ID_NAME;
             }
-        } else if(token.type == 'string' || token.type == 'number') {
+        }else if(token.type == TString || token.type == TNumber) {
             token.id = ID_LITERAL;
             // lexer transforms numbers to floats
         } else /*operator*/ {
             token.id = token.value;
         }
         
-        return _extend(token, symtab[token.id]); // clone FTW.  So what if it might be slow?   handles the this binding simply.
-    }
+		
+		//create 
+        //return _extend(token, symtab[token.id]); // clone FTW.  So what if it might be slow?   handles the this binding simply.
+		return token;
+	}
 
     public function infix_codegen(opcode:Dynamic):Void->Void { 
 		return function():Void { 
@@ -360,18 +369,18 @@ package sjs;
         sym.codegen = function():Void {
             if(mutate) {                                    
                 // do the operation     // if it's "x += 3", then...
-                C(this.first);          // LIT x
-                C(this.second);         // VAL 3
+                C(untyped this.first);          // LIT x
+                C(untyped this.second);         // VAL 3
                 emit(operation);        // ADD
             } else {
                 // just emit the value   // if it's "x = 3", then:  LIT 3
-                C(this.second);
+                C(untyped this.second);
             }
 
             //assign it to the lhs
-            C(this.first, true);        // LIT x 
+            C(untyped this.first, true);        // LIT x 
 
-            if(this.first.id=='.') {
+            if(untyped this.first.id=='.') {
                 // e.g. for "point.x += 3", change the opcode from:
                 //    VAL point LIT x GETINDEX LIT 3 ADD    VAL point LIT x GETINDEX
                 // to:                                                      ^^^
@@ -449,9 +458,9 @@ package sjs;
           // grab first token and call its nud
           var t:Dynamic = token;
           next();
-          if(t.nud == undefined) {
+          if(t.nud == null) {
             trace(formattedSyntaxError(t));
-            throw new SyntaxError("Unexpected " + t.id + " token:  ``" + t.value + "''" + " at char:" + t.from + "-" + t.to + " || line: " + offending_line(t.from));
+            throw  "Unexpected " + t.id + " token:  ``" + t.value + "''" + " at char:" + t.from + "-" + t.to + " || line: " + offending_line(t.from);
           }
           var lhs:Dynamic = t.nud();
           // shovel left hand side into higher-precedence tokens' methods
@@ -459,7 +468,7 @@ package sjs;
               t = token;
               next();              
               if(!t.led) { 
-                throw new SyntaxError(t + 'has no led in ' + source_code);
+                throw t + 'has no led in ' + source_code;
               }
               lhs = t.led(lhs);
           } 
@@ -468,9 +477,9 @@ package sjs;
       }
                      
     public function block():Dynamic {
-      var t:Dynamic = token;
-      next("{");
-      return t.std();
+		var t:Dynamic = token;
+		next("{");
+		return t.std();
     };
 
       
@@ -588,7 +597,7 @@ package sjs;
         }
       } else {
         if(!node.hasOwnProperty('codegen')) { 
-          throw new SyntaxError('No Codegen for '+node.name+'#'+node.id+'='+node.value);
+          throw 'No Codegen for '+node.name+'#'+node.id+'='+node.value;
         } else {
           node.codegen(is_lhs);
         }

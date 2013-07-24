@@ -24,9 +24,9 @@ package sjs;
   import flash.events.Event;
   import flash.events.EventDispatcher;
   
-  public class VM extends EventDispatcher {
+  class VM extends EventDispatcher {
 
-    public static var _VM_ID:int = 0;
+    public static var _VM_ID:int;// (0);
     public static var registry:Object = { Math:Math, Date:Date, 'null':null }; // TweenLite, etc goes here
 
     public static function register(key:String, value:*) : void {
