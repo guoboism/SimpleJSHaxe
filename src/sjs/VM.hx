@@ -11,18 +11,23 @@ Notes to self:
 */
 
 package sjs;
+
   import sjs.Inspector;
-  import flash.utils.getDefinitionByName;
-  import flash.utils.getQualifiedClassName;
- 
-  import flash.geom.*;
-  import flash.display.*;
-  
   //import Promise;
   import sjs.util.ANSI;
-
+  
+  import flash.utils.getDefinitionByName;
+  import flash.utils.getQualifiedClassName;
+  import flash.geom.*;
+  import flash.display.*;
   import flash.events.Event;
   import flash.events.EventDispatcher;
+  
+  //GB
+  //validate these imports
+  //registry to map
+  //change const
+  
   
   class VM extends EventDispatcher {
 
@@ -620,21 +625,21 @@ package sjs;
 
 
         private function _resumeFromPromise(...promiseFulfillArgs) : void {
-          trace('_resumeFromPromise', promiseFulfillArgs);
-          // convert all cases to 1-arg.
-          //    0: null
-          //    1: pass through
-          //    N: pass as an array 
+          	trace('_resumeFromPromise', promiseFulfillArgs);
+          	// convert all cases to 1-arg.
+          	//    0: null
+          	//    1: pass through
+          	//    N: pass as an array 
 
-          if(promiseFulfillArgs.length == 0) {
-            opush(null);
-          } else if(promiseFulfillArgs.length == 1) {
-            opush(promiseFulfillArgs[0]);
-          } else {
-            opush(promiseFulfillArgs);
-          }
+          	if(promiseFulfillArgs.length == 0) {
+           	 opush(null);
+          	} else if(promiseFulfillArgs.length == 1) {
+          	  opush(promiseFulfillArgs[0]);
+          	} else {
+          	  opush(promiseFulfillArgs);
+          	}
 
-          run();
+         	run();
         }
         
         private function AWAIT():void {
