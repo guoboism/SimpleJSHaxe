@@ -1,7 +1,7 @@
 /*  Parser
 
   The class takes the unconventional (for AS3) step of defining a bunch of
-  "symbol" objects like this:
+  "symbol" objects like untyped this:
   
     { bpow:an_int, nud: function() { ... }, led:function(){ ... }, std:function() { ... } }
   
@@ -47,11 +47,12 @@ package sjs;
   import sjs.data.Symbol;
   import sjs.util.ANSI;
   import sjs.data.Token;
+  import sjs.VM;
     
   class Parser {
 
 	public var symtab:Map<String,Symbol>;
-	public var scopes:Array<Dynamic>; // just names //GB was = [[]]
+	public var scopes:Array<Array<String>>; // just names //GB was = [[]]
 	public var tokens:Array<Token>;
 	public var token:Symbol = null;//GB is it a type token and symbol at different time? 
 	public var token_idx:Int = 0;
@@ -61,7 +62,7 @@ package sjs;
 	public var ID_END    :String = '(end)';
 	public var ID_LITERAL:String = '(literal)';
 	public var ID_NAME   :String = '(name)'; // we attach IDs to lexer tokens
-	public var T_NAME    :String = 'name';  // tokens from the lexer have type, value, from, and to
+	//GB deleted as we have enum//public var TName    :String = 'name';  // tokens from the lexer have type, value, from, and to
 
     // public inline static var END_TOKEN :Dynamic = 
     public static function getEndToken():Dynamic {
@@ -90,7 +91,7 @@ package sjs;
         init_symbols();
     }
       
-    // usage:  vm.load ( parser.parse(js_code).codegen()).run();
+    // usage:  VM.load ( parser.parse(js_code).codegen()).run();
     // or: interp.load(js); interp.run();
     // or: new Interpreter(js});
 	public function parse (src:String):Parser {
@@ -100,19 +101,26 @@ package sjs;
 		source_code = src;
 
 		tokens = Lexer.tokenize(src);
+		
+		trace("Tokens:"); 
+		for (i in 0...tokens.length) {
+			trace(tokens[i].type + " : " + tokens[i].value); 
+		}
+		
 		next();
 		ast = statements();
 		return this;
 	}
 
 	public function codegen(?src:String):Array<Dynamic>{
-	  if(src) { parse(src); }
+	  if(src != null && src.length > 0) { parse(src);}
 	  
 	  //log("##### CODE GENERATION ####\n", JSON.stringify(ast));
 	  
 	  generated_code = [];
 	  C(ast);
-	  log('## GENERATED:', generated_code.join(" "));
+	  log(['## GENERATED:', generated_code.join(" ")]);
+	  trace('## GENERATED:', generated_code.join(" "));
 	  return generated_code;
 	}
     
@@ -176,7 +184,7 @@ package sjs;
 	}
 
 	private function _annotateVarsWithType(e:Dynamic, i:Int, a:Array<Dynamic>) : String {          
-	  if(i == 0 || a[i-1] != VM.LIT) {
+	  if(i == 0 || a[i-1] != LIT) {
 		return e;  // don't annotate non-literals with type
 	  }
 	  
@@ -184,14 +192,15 @@ package sjs;
 		return "[ " + e.map(_annotateVarsWithType).join(' ') + ' ]';
 	  }
 	  
-	  return typeof(e) + ':' + e;          
+	  return Type.typeof(e) + ':' + e;          
 	  /*return ':' + e;*/
 	}
 	
+	/* GB ref not found
 	public function dbg_codegen_string():String {
 		this.codegen();
-		return generated_code.map(_annotateVarsWithType).join(' ');
-	}
+		return generated_code.map(_annotateVarsWithType()).join(' '); //map a function as key?
+	}*/
 
 
 	public function log(msg:Array<Dynamic>) : Void { //GB this is a varing pramater function; use Reflect.makeVarArgs(log)(1, 2, 3);
@@ -261,7 +270,7 @@ package sjs;
         //var pt:Dynamic = token; //GB commented as unesed
         token = new Symbol();
 		token.extendFromToken(tokens[token_idx++]);
-          
+        
         if(token_idx > tokens.length) return token  = getEndToken();
 
         if(token.type == TName) {
@@ -280,13 +289,14 @@ package sjs;
 		
 		//create 
         //return _extend(token, symtab[token.id]); // clone FTW.  So what if it might be slow?   handles the this binding simply.
+		token.extendFromSymbol(symtab[token.id]);
 		return token;
 	}
 
     public function infix_codegen(opcode:Dynamic):Void->Void { 
 		return function():Void { 
-			C(this.first); 
-			C(this.second); 
+			C(untyped this.first); 
+			C(untyped this.second); 
 			emit(opcode); 
 		};
     }
@@ -294,17 +304,17 @@ package sjs;
 
     public function infix_thunk_rhs_codegen(opcode:Dynamic):Void->Void { 
 		return function():Void { 
-			C(this.first);
+			C(untyped this.first);
 			// delay evaluation of second child by wrapping it in an array literal
-			emit(VM.LIT);
-			emit(codegen_block(this.second));
+			emit(LIT);
+			emit(codegen_block(untyped this.second));
 			emit(opcode);
 			};
     }
     
 
     public function prefix_codegen(opcode:Dynamic):Void->Void  { 
-		return function():Void { C(this.first); emit(opcode); };
+		return function():Void { C(untyped this.first); emit(opcode); };
     }
 
 
@@ -314,56 +324,64 @@ package sjs;
     }
 
 
-    public function infix(sym:String, bpow:Float, opcode:Dynamic) : Dynamic {
+    public function infix(sym:String, bpow:Int, opcode:Dynamic) : Dynamic {
       
         function leftDenotation(lhs:Dynamic):Dynamic {
-			this.first = lhs;
-			this.second = expression(this.bpow);
-			return this;
+			untyped this.first = lhs;
+			untyped this.second = expression(untyped this.bpow);
+			return untyped this;
         }
         
-        return symtab[sym] = {  led:leftDenotation,
-                                  codegen:infix_codegen(opcode),
-                                  bpow:bpow };
+        symtab[sym] = new Symbol();
+		symtab[sym].led = leftDenotation;
+		symtab[sym].codegen=infix_codegen(opcode);
+		symtab[sym].bpow = bpow;
+		
+		return symtab[sym];
     }
 
 
-    public function infix_thunk_rhs(sym:String, bpow:Float, opcode:Dynamic) : Dynamic {
-		return symtab[sym] = {
-								led:function(lhs:Dynamic):Dynamic {
-										this.first = lhs;
-										this.second = expression(this.bpow);
-										return this;
-									},
-								codegen:infix_thunk_rhs_codegen(opcode),
-								bpow:bpow
-		};
+    public function infix_thunk_rhs(sym:String, bpow:Int, opcode:Dynamic) : Dynamic {
+		
+		symtab[sym] = new Symbol();
+		symtab[sym].led = function(lhs:Dynamic):Dynamic {
+										untyped this.first = lhs;
+										untyped this.second = expression(untyped this.bpow);
+										return untyped this;
+									}
+									
+		symtab[sym].codegen = infix_thunk_rhs_codegen(opcode);
+		symtab[sym].bpow = bpow;
+		
+		
+		return symtab[sym];
     }
 
 
-    public function prefix(sym:String, bpow:Float, opcode:Dynamic) : Void { 
+    public function prefix(sym:String, bpow:Int, opcode:Dynamic) : Void { 
         var s:Dynamic = symbol(sym);
-        s.bpow = s.bpow || 140;  // don't want infix - to get a higher precedence than *, for example.
+        s.bpow = s.bpow !=0 ? s.bpow:140;  // don't want infix - to get a higher precedence than *, for example.
         s.nud = function():Dynamic {
-            this.first = expression(0);
-            return this;
+            untyped this.first = expression(0);
+            return untyped this;
         };
         s.codegen = prefix_codegen(opcode);
     }
 
 
-	public function assignment(id:String, bpow:Int, operation:String=null) : Void {
-        var sym:Symbol = symbol(id);
+	//GB public function assignment(id:String, bpow:Int, operation:String=null) : Void {
+    public function assignment(id:String, bpow:Int, operation:OPCode=null) : Void {
+		var sym:Symbol = symbol(id);
         sym.bpow = bpow;
       
       
         var mutate:Bool = operation == null ? true : false;    // operation is "+" for +=, "-" for -=, etc; and null for "=". 
       
         sym.led = function(lhs:Dynamic):Dynamic {
-                                    untyped this.first = lhs;
-                                    untyped this.second = expression(untyped this.bpow - 1 );  /* drop the bpow by one to be right-associative */
-                                    untyped this.assignment = true;
-                                    return this;
+                                    sym.first = lhs;
+                                    sym.second = expression(untyped this.bpow - 1 );  /* drop the bpow by one to be right-associative */
+                                    sym.assignment = true;
+                                    return sym;
                                 };
 
         sym.codegen = function():Void {
@@ -385,9 +403,9 @@ package sjs;
                 //    VAL point LIT x GETINDEX LIT 3 ADD    VAL point LIT x GETINDEX
                 // to:                                                      ^^^
                 //    VAL point LIT x GETINDEX LIT 3 ADD    VAL point LIT x PUTINDEX
-                remit(VM.PUTINDEX); // PUTINDEX consumes the stack (val obj key)  and does obj[key] = val;
+                remit(PUTINDEX); // PUTINDEX consumes the stack (val obj key)  and does obj[key] = val;
             } else {
-                emit(VM.PUT);
+                emit(PUT);
             }
             // PUT leaves the value onstack for multiple assignment, DROP it as we come out of the nested assignments
             // need_drop();
@@ -396,42 +414,46 @@ package sjs;
     }
 
 
-    public function affix(id:String, bpow:Int, opcode:String) : Void {
-       symtab[id] = {
-              bpow:bpow,
-              isPrefix:false,
-              led:function(lhs:Dynamic) : Dynamic {
-                this.first = lhs;
-                return this;
-              },
-              nud:function() : Dynamic {
-                // next must be variable name
-                if(token.id == ID_NAME) {
-                  this.first = token;
-                  this.isPrefix = true;
-                  next();
-                  return this;
-                } else {
-                  throw new Error("Expected ID_NAME after ++ operator");
-                }
-              },
-              codegen:function() : Void {
-                // increment the variable, leaving a copy of its previous value on the stack.
-                if(this.isPrefix) {
-                  C(this.first);
-                  emitMulti([VM.LIT, 1, opcode]); 
-                  emit(VM.DUP);
-                  C(this.first, true);
-                  emit(VM.PUT);
-                } else /* postfix */ {
-                  C(this.first);
-                  emit(VM.DUP);
-                  emitMulti([VM.LIT, 1, opcode]); 
-                  C(this.first, true);
-                  emit(VM.PUT);
-                }
-              }
-            };      
+    public function affix(id:String, bpow:Int, opcode:OPCode) : Void {
+		symtab[id] = new Symbol();
+		symtab[id].bpow = bpow;
+		symtab[id].isPrefix = false;
+		symtab[id].led = function(lhs:Dynamic) : Dynamic {
+			untyped this.first = lhs;
+			return untyped this;
+		};
+			  
+			  
+        symtab[id].nud = function():Dynamic {
+			// next must be variable name
+			if(token.id == ID_NAME) {
+				untyped this.first = token;
+				untyped this.isPrefix = true;
+				next();
+				return this;
+			} else {
+				throw "Expected ID_NAME after ++ operator";
+			}
+			return null;
+		};
+			  
+        symtab[id].codegen = function() : Void {
+			// increment the variable, leaving a copy of its previous value on the stack.
+			if(untyped this.isPrefix) {
+				C(untyped this.first);
+				emitMulti([LIT, 1, opcode]); 
+				emit(DUP);
+				C(untyped this.first, true);
+				emit(PUT);
+			} else /* postfix */ {
+				C(untyped this.first);
+				emit(DUP);
+				emitMulti([LIT, 1, opcode]); 
+				C(untyped this.first, true);
+				emit(PUT);
+			}
+		};
+             
     }
 
        
@@ -454,27 +476,28 @@ package sjs;
 
 
     public function expression(rbp:Float):Dynamic {
-          xd++;
-          // grab first token and call its nud
-          var t:Dynamic = token;
-          next();
-          if(t.nud == null) {
-            trace(formattedSyntaxError(t));
-            throw  "Unexpected " + t.id + " token:  ``" + t.value + "''" + " at char:" + t.from + "-" + t.to + " || line: " + offending_line(t.from);
-          }
-          var lhs:Dynamic = t.nud();
-          // shovel left hand side into higher-precedence tokens' methods
-          while (rbp < token.bpow){
-              t = token;
-              next();              
-              if(!t.led) { 
-                throw t + 'has no led in ' + source_code;
-              }
-              lhs = t.led(lhs);
-          } 
-          xd--;
-          return lhs;
-      }
+        xd++;
+        // grab first token and call its nud
+        var t:Dynamic = token;
+        next();
+        if(t.nud == null) {
+			trace(formattedSyntaxError(t));
+			throw  "Unexpected " + t.id + " token:  ``" + t.value + "''" + " at char:" + t.from + "-" + t.to + " || line: " + offending_line(t.from);
+        }
+		  
+        var lhs:Dynamic = t.nud();
+        // shovel left hand side into higher-precedence tokens' methods
+        while (rbp < token.bpow){
+            t = token;
+            next();              
+            if(!t.led) { 
+				throw t + 'has no led in ' + source_code;
+            }
+			lhs = t.led(lhs);
+        } 
+        xd--;
+        return lhs;
+    }
                      
     public function block():Dynamic {
 		var t:Dynamic = token;
@@ -494,7 +517,7 @@ package sjs;
         var xstmt:Dynamic = expression(0);
     
         if(!(xstmt.assignment || xstmt.id == '(')) { 
-            throw( new Error('invalid expression statement :' +  offending_line(t.from)) );
+            throw('invalid expression statement :' +  offending_line(t.from) );
         } // neither assignment nor function call
         next(';');
         return xstmt;
@@ -548,7 +571,7 @@ package sjs;
       C(n1); C(n2); emit(op);
     }
 
-    // usage = j = emit_jump_returning_patcher(VM.JUMPFALSE); ... emit a bunch of stuff ... j();
+    // usage = j = emit_jump_returning_patcher(JUMPFALSE); ... emit a bunch of stuff ... j();
     // opcodes are:  JUMP|JUMPFALSE <offset>
     // The offset is from the address of JUMPFALSE, not of <offset>
   public function emit_jump_returning_patcher(opcode:Dynamic):Void->Void {
@@ -587,11 +610,11 @@ package sjs;
        if(Std.is(node, Array)) { // statements or argument lists
         for(i in 0...node.length) {
             C(node[i], is_lhs);
-            /*emit(VM.DROPALL);*/
+            /*emit(DROPALL);*/
             // we might need to drop some leftover values from a multiple assignment
             // while(drops_needed > 0) { 
             //   log('emitting drop after multiple assignment,', drops_needed, 'remaining');
-            //   emit(VM.DROP);
+            //   emit(DROP);
             //   drops_needed--;
             // }
         }
@@ -616,32 +639,43 @@ package sjs;
     }
     
 
-    public function C_hash(o:Dynamic):Void{
-      for(k in o) {
-        emitMulti(['LIT', k]);
-        C(o[k]);
-      }
+    public function C_hash(o:Dynamic):Void {
+		
+		var fields = Reflect.fields (o);
+		for (propertyName in fields) {
+			emitMulti(['LIT', propertyName]);
+			C(Reflect.field(o, propertyName));
+		}
+		
+		/* GB
+		for(k in o) {
+			emitMulti(['LIT', k]);
+			C(o[k]);
+		}*/
     }
 
 
-  // scope handling stuff at present only exists to prevent name collisions at parse time.
-     public function scope_define(name:String):Void {
+	// scope handling stuff at present only exists to prevent name collisions at parse time.
+    public function scope_define(name:String):Void {
         // used by: function, var
-/*        log('scope_define', name);*/
-// allow redefinition so we can say function x() {...} repeatedly during dev
+		/*log('scope_define', name);*/
+		// allow redefinition so we can say function x() {...} repeatedly during dev
         // for each(var existing_name:String in scopes[0]) {
         //   if(existing_name == name) {
         //     throw new Error('tried to redefine variable ' + existing_name + ' in line "' + offending_line() + '"');
         //   }
         // }
+		
         scopes[0].push(name); // FIXME, throw an error if it's already defined 
-      }
-      public  function scope_push():Void {
+    }
+	  
+    public  function scope_push():Void {
         scopes.unshift([]);
-      }
-      public function scope_pop():Void {
-        scopes.shift();
-      }
+    }
+	  
+    public function scope_pop():Void {
+		scopes.shift();
+    }
       
 
     public function parse_argument_list():Array<Dynamic> {
@@ -666,10 +700,12 @@ package sjs;
       
     public function init_symbols():Void {
 
+		symtab = new Map<String,Symbol>();
+		
 		//constants
 		constant('true', true);
 		constant('false', false);
-
+		
 		//primitives
 		symtab[ID_NAME] = new Symbol(null,function():Dynamic {return this;},null);
 		symtab[ID_NAME].toString = function():String { return untyped this.value; };
@@ -682,82 +718,82 @@ package sjs;
 		//assignment
 		// fixme: and here we see why V K SWAP SET is more consistent than V K PUT
 		assignment('=', 20);
-		assignment('+=', 130, VM.ADD);
-		assignment('-=', 130, VM.SUB);
-		assignment('*=', 130, VM.MUL);
-		assignment('/=', 130, VM.DIV);
-		assignment('%=', 130, VM.MOD);
+		assignment('+=', 130, ADD);
+		assignment('-=', 130, SUB);
+		assignment('*=', 130, MUL);
+		assignment('/=', 130, DIV);
+		assignment('%=', 130, MOD);
 
-		affix('++', 140, VM.ADD);
-		affix('--', 140, VM.SUB);
+		affix('++', 140, ADD);
+		affix('--', 140, SUB);
             
 
-		prefix('!', 140, VM.NOT);
-		infix('+', 120, VM.ADD);
+		prefix('!', 140, NOT);
+		infix('+', 120, ADD);
 		infix('-', 120, '*minus*');
 		prefix('-', 120, '*unary minus*');
 
 		// tbd: different codegens by arity?
 		symtab['-'].codegen = function():Void { 
 			if(untyped this.second) 
-				emit_infix(untyped this.first, untyped this.second, VM.SUB);
+				emit_infix(untyped this.first, untyped this.second, SUB);
 			else {
-				emit_prefix(untyped this.first, VM.NEG);
+				emit_prefix(untyped this.first, NEG);
 			}
 		};
         
 
-		infix('*', 130, VM.MUL);
-		infix('/', 130, VM.DIV);
-		infix('%', 130, VM.MOD);
+		infix('*', 130, MUL);
+		infix('/', 130, DIV);
+		infix('%', 130, MOD);
 
 
             // comparison
-		infix('<', 100, VM.LT);
-		infix('<=',100, VM.LTE);
-		infix('>', 100, VM.GT);
-		infix('>=',100, VM.GTE);
-		infix('==', 90, VM.EQL);
+		infix('<', 100, LT);
+		infix('<=',100, LTE);
+		infix('>', 100, GT);
+		infix('>=',100, GTE);
+		infix('==', 90, EQL);
 
   
-		infix_thunk_rhs('&&', 50, VM.AND);
-		infix_thunk_rhs('||', 40, VM.OR);
+		infix_thunk_rhs('&&', 50, AND);
+		infix_thunk_rhs('||', 40, OR);
 
       
-		infix('.', 160, VM.GETINDEX); // a.b.c indexing operator
+		infix('.', 160, GETINDEX); // a.b.c indexing operator
 		//indexing
 		// RHS [k(1) dot... k(n-1) dot] dict k(n) put
 		// where dot has stack effect ( o k -- o[k] )
 		// a.b.c.d = e -- $ e $a # b dot # c dot # d dot dict 
 		symtab['.'].codegen = function(is_lhs:Bool /* assignment? */):Void {
-			if(this.first.id != '.') {
-				C(this.first, false); // use VAL
+			if(untyped this.first.id != '.') {
+				C(untyped this.first, false); // use VAL
 			} else {
-				C(this.first, true);  // use LIT
+				C(untyped this.first, true);  // use LIT
 			}
-			C(this.second, true); // treat as LHS until the last item in the dot-chain
-			emit(VM.GETINDEX);
+			C(untyped this.second, true); // treat as LHS until the last item in the dot-chain
+			emit(GETINDEX);
 		};
             
             
 		symbol('new');
 		symbol('new').bpow = 160;
 		symbol('new').nud = function():Dynamic {
-			if(token.type != T_NAME) throw("Expected name after new operator, got " + token.value + " in: " + offending_line());
-			this.first = token;
+			if(token.type != TName) throw("Expected name after new operator, got " + token.value + " in: " + offending_line());
+			untyped this.first = token;
 			next(/*constructor*/);
 			next('(');
-			this.second = token.id == ')' ? [] : parse_argument_list();
+			untyped this.second = token.id == ')' ? [] : parse_argument_list();
 			next(')');
-			return this;
+			return untyped this;
 		};
 		
 		symbol('new').codegen = function():Void {
-			emit_lit(this.first.value);
-			emit(VM.MARK);
-			C(this.second);
-			emit(VM.ARRAY);
-			emit(VM.NATIVE_NEW);   // ( constructor [args] -- instance )
+			emit_lit(untyped this.first.value);
+			emit(MARK);
+			C(untyped this.second);
+			emit(ARRAY);
+			emit(NATIVE_NEW);   // ( constructor [args] -- instance )
 		};
             
 		symtab['('] = new Symbol();
@@ -769,33 +805,33 @@ package sjs;
 			return expr;
         };
 		symtab['('].led = function(lhs:Dynamic):Dynamic{
-			this.first = lhs;
+			untyped this.first = lhs;
 			// will be on '('
-			this.second = parse_argument_list();
+			untyped this.second = parse_argument_list();
 			next(')');
-			this.isFunctionCall = true;
-			return this;
+			untyped this.isFunctionCall = true;
+			return untyped this;
         };
         symtab['('].codegen = function():Void {
-              /*// recurse and find "..." async in argument list?
-              //whatabout f(..., f2(...))
-              // : translates to await f(resumeLastAwait, await f2(resumeLastAwait))
-              //
-              function isEllipsis(arg:Object, i:Int, a:Array):Bool {
-                return arg.id == '...';
-              }*/
-              
-              /*var isAsync:Bool = this.second.some(isEllipsis);*/
+			/*// recurse and find "..." async in argument list?
+			//whatabout f(..., f2(...))
+			// : translates to await f(resumeLastAwait, await f2(resumeLastAwait))
+			//
+			function isEllipsis(arg:Object, i:Int, a:Array):Bool {
+				return arg.id == '...';
+			}*/
+		  
+			/*var isAsync:Bool = this.second.some(isEllipsis);*/
 
-              C(this.first);
-              emit(VM.MARK);
-              C(this.second);
-              emit(VM.ARRAY);
-              emit(VM.CALL);
+			C(untyped this.first);
+			emit(MARK);
+			C(untyped this.second);
+			emit(ARRAY);
+			emit(CALL);
 
-              /*if(this.second.some(isEllipsis)) {
-                emit(VM.AWAIT);
-              }*/
+			/*if(this.second.some(isEllipsis)) {
+				emit(AWAIT);
+			}*/
         };
       
         
@@ -807,13 +843,13 @@ package sjs;
 				// we need to create a fake function-name token for this anonymous function
 				var fn_name:Dynamic = {
 					id: ID_NAME,
-					type: T_NAME,
+					type: TName,
 					value: getAnonFuncName(),
 					isAnonymous:true
 				};
 
 				scope_push();
-				this.scope = scopes[0];
+				untyped this.scope = scopes[0];
 				next('(');
 				if(token.id != ')') {
 					args = parse_argument_list();
@@ -827,11 +863,11 @@ package sjs;
 
 				scope_pop();
 
-				this.first = fn_name;
-				this.second = args;
-				this.third = body;
+				untyped this.first = fn_name;
+				untyped this.second = args;
+				untyped this.third = body;
 
-				return this;
+				return untyped this;
 			},
 			
 			function():Dynamic {
@@ -839,11 +875,11 @@ package sjs;
 				var args:Array<Dynamic> = [];
 				next(/* skip the function name */);
       
-				if(fn_name.type != T_NAME) { throw("Invalid function name '" + fn_name.value + "' on line: " + offending_line()); }
+				if(fn_name.type != TName) { throw("Invalid function name '" + fn_name.value + "' on line: " + offending_line()); }
             
 				scope_define(fn_name.value);
 				scope_push();
-				this.scope = scopes[0];
+				untyped this.scope = scopes[0];
 				next('(');
 				if(token.id != ')') {
 					args = parse_argument_list();
@@ -855,9 +891,9 @@ package sjs;
   
 				scope_pop();
        
-				this.first = fn_name;
-				this.second = args;
-				this.third = body;
+				untyped this.first = fn_name;
+				untyped this.second = args;
+				untyped this.third = body;
       
       
 				return this;
@@ -888,26 +924,28 @@ package sjs;
 			// function f(a) { var v; trace(v); }  -->   <MARKER> LIT f MARK LIT a LIT v LOCAL ARRAY LIT trace MARK LIT v ARRAY CALL ] <CLOSURE>
           
 			// function name literal
-			emit_lit(this.first.value);
+			emit_lit(untyped this.first.value);
           
 			// arguments
-			emit(VM.MARK);
-			C(this.second, true);
-			emit(VM.ARRAY);
+			emit(MARK);
+			C(untyped this.second, true);
+			emit(ARRAY);
           
 			// tbd: fix this hack to create locals at the beginning of a function's code block
-			var body:Array<Dynamic> = codegen_block(this.third);
-			for(v in this.scope) { body.unshift(VM.LOCAL); body.unshift(v); body.unshift(VM.LIT); }
+			var body:Array<Dynamic> = codegen_block(untyped this.third);
+			
+			var tpScope:Array<String> = untyped this.scope;
+			for(v in tpScope) { body.unshift(LOCAL); body.unshift(v); body.unshift(LIT); }
 
-			emit(VM.LIT);
+			emit(LIT);
           
 			emit(body);
           
-			//emit(VM.MARK); emit(VM.EVAL_OFF); body.forEach(emit1); emit(VM.EVAL_ON); emit(VM.ARRAY);  // not the greatest idea
-			emit(VM.CLOSURE);
-			if(!this.first.isAnonymous) {
+			//emit(MARK); emit(EVAL_OFF); body.forEach(emit1); emit(EVAL_ON); emit(ARRAY);  // not the greatest idea
+			emit(CLOSURE);
+			if(!untyped this.first.isAnonymous) {
 				/*trace('emitting drop for named function codegen');*/
-				emit(VM.DROP); // anon function will presumably be assigned to something... although, wait, this kills the module pattern: (function(){...})()
+				emit(DROP); // anon function will presumably be assigned to something... although, wait, this kills the module pattern: (function(){...})()
 			}
         };
 
@@ -918,15 +956,15 @@ package sjs;
 		symtab['return'].std = function():Dynamic {            
 			// peek at next token to see if this is "return;" as opposed to "return someValue;"
 			if(token.id != ';') {
-				this.first = expression(0);
+				untyped this.first = expression(0);
 			}
 			next(';');
-			return this;
+			return untyped this;
 		};
 		
 		symtab['return'].codegen=function():Void {
-				C(this.first);
-				emit(VM.RETURN);
+				C(untyped this.first);
+				emit(RETURN);
         };
 		
 
@@ -942,43 +980,43 @@ package sjs;
 				}
 			}
 			next(']');
-			this.first = a;
+			untyped this.first = a;
 		  
-			this.subscripting = false;
-			return this;
+			untyped this.subscripting = false;
+			return untyped this;
 		};
 		
 		symtab['['].led = function(lhs:Dynamic):Dynamic{
-			this.first = lhs;  // "y"
+			untyped this.first = lhs;  // "y"
 			// will be on '['
-				this.second = expression(0); // "z"
+				untyped this.second = expression(0); // "z"
 			next(']');
 
-			this.subscripting = true;
-			return this;
+			untyped this.subscripting = true;
+			return untyped this;
         };
 		
-		symtab['['].toString = function():String { return "(array " + this.first + ")"; };
+		symtab['['].toString = function():String { return "(array " + untyped this.first + ")"; };
 		symtab['['].bpow = 160;
 		symtab['['].codegen = function(is_lhs:Bool = false):Void { 
-            if(this.subscripting) {
-              //this.first could be a variable name or a literal array, e.g.  [1,2,3][0];  getArray()[0]
+            if(untyped this.subscripting) {
+              //untyped this.first could be a variable name or a literal array, e.g.  [1,2,3][0];  getArray()[0]
               //we want to throw whatever it is on the stack, then getIndex it.
-              C(this.first, false); // use VAL, in "x = y[z]", we want the value of y on the stack
-              C(this.second, false); // treat as RHS...      // FIXME: a[i] = n fails by using PUTINDEX
-              emit(is_lhs ? VM.PUTINDEX : VM.GETINDEX);
+              C(untyped this.first, false); // use VAL, in "x = y[z]", we want the value of y on the stack
+              C(untyped this.second, false); // treat as RHS...      // FIXME: a[i] = n fails by using PUTINDEX
+              emit(is_lhs ? PUTINDEX : GETINDEX);
             } else {
-              emit('MARK'); C(this.first); emit('ARRAY');
+              emit('MARK'); C(untyped this.first); emit('ARRAY');
             }
         };
 
-		symtab['{'] = { 
-			std:function():Dynamic { 
+		symtab['{'] = new Symbol();
+		symtab['{'].std = function():Dynamic { 
 				var a:Array<Dynamic> = statements();
 				next('}');
 				return a;
-			}, 
-         nud:function():Dynamic {
+			};
+        symtab['{'].nud = function():Dynamic {
             var key:Dynamic, value:Dynamic, obj:Dynamic = {};
             while(true) {
               key = token;
@@ -991,190 +1029,191 @@ package sjs;
               next();
             }
             next('}');
-            this.first = obj;
-            return this;
-         },
-         codegen:function():Void { emit('MARK'); C_hash(this.first);  emit('HASH'); }
-      };
+            untyped this.first = obj;
+            return untyped this;
+         };
+		 
+         symtab['{'].codegen = function():Void { emit('MARK'); C_hash(untyped this.first);  emit('HASH'); };
+		
 
-    /***********************************************************
-    *
-    *    CONTROL STRUCTURES
-    *
-    ***********************************************************/
+		/***********************************************************
+		*
+		*    CONTROL STRUCTURES
+		*
+		***********************************************************/
 
 
-      symtab['if'] = {
-          std:function():Dynamic {
+		symtab['if'] = new Symbol();
+		symtab['if'].std = function():Dynamic {
               next('(');
               var cond:Dynamic = expression(0);
               next(')');
               next('{');
               var then_block:Array<Dynamic> = statements();
               next('}');
-              this.first = cond;
-              this.second = then_block;
+              untyped this.first = cond;
+              untyped this.second = then_block;
         
               // trace(token);
               if(token.id == ID_NAME && token.value == 'else') {
                 next(); // skip else
                 var t:Dynamic = token;
-                this.third = t.value == 'if' ? statement() : block( /* eats  { and } */);
+                untyped this.third = t.value == 'if' ? statement() : block( /* eats  { and } */);
                 // what if the next statement's another if?
               }
-              return this;
-          },
-          bpow:0,
+              return untyped this;
+        };
+        symtab['if'].bpow = 0;
 
-          codegen:function():Void {
-              C(this.first); // test
-          
-              var patch_if:Function = emit_jump_returning_patcher(VM.JUMPFALSE);
-              C(this.second);
-              patch_if();
-          
-              if(this.third) {
-                var patch_else:Function = emit_jump_returning_patcher(VM.JUMP);
-                patch_if();
-                C(this.third);
-                patch_else();  // rewrite @else to point after "if{...}else{...}" instructions.
-              }
-            }        
-      };
-
-      symtab['while'] = {
-          std:function():Dynamic {
-              next('(');
-              var cond:Dynamic = expression(0);
-              next(')');
-              next('{');
-              var block:Array<Dynamic> = statements();
-              next('}');
-              this.first = cond;
-              this.second = block;
-              return this;
-          },
-          bpow:0,
-          codegen:function():Void {
-              var emit_backjump_to_test:Function = backjumper(VM.JUMP);
-              C(this.first);
-              var patch_jump_over_body:Function = emit_jump_returning_patcher(VM.JUMPFALSE);
-              C(this.second);
-              emit_backjump_to_test();
-              patch_jump_over_body();
-            }          
-      };
-
-
-      symtab['for'] = {
-          std:function():Dynamic {
-           // for (initial-expr ; test-expr ; final-expr ) { body }
-           next('(');
-           var init:Dynamic = expression(0);
-           next(';');
-           var test:Dynamic = expression(0);
-           next(';');
-           var modify:Dynamic = expression(0);
-           next(')');
-           next('{');
-           var block:Array<Dynamic> = statements();
-           next('}');
-           this.first = [init,test,modify];
-           this.second = block;
-           
-           return this; // UNTESTED
-          },
-          bpow:0,
-                                                        // "for(i = 0; i < 10; i++) { trace(i); }"
-          codegen:function():Void{
-              C(this.first[0]);                         // i = 0
-              var backjump_to_test:Function = backjumper(VM.JUMP);
-              C(this.first[1]);                         // i < 10
-              var jumpfalse_to_here:Function = emit_jump_returning_patcher(VM.JUMPFALSE);
-              C(this.second);                           // trace(i);
-              C(this.first[2]);                         // i ++
-              backjump_to_test();                       // } --> JUMP to i < 10
-              jumpfalse_to_here();                      // patch the JUMPFALSE after "i<10" 
-          }
-      };
-
-
-      symtab['var'] = {
-          std:function():Dynamic {
-/*            trace('* var statement');*/
-              var e:Dynamic, names:Array<Dynamic> = [];
-              while(true){
-                  e = expression(0);
-                  if(e.id != '=' && e.id != ID_NAME) { 
-                      throw new Error('Unexpected intializer ' + e + ' in var statement :' + offending_line(this.from));
-                  }
-                  names.push(e);
-                  // here's one place where static typing would have saved me trouble:
-/*                  scope_define(e.id == 'NAME' ? e.id : e.first.id)*/
-                  scope_define(e.type == T_NAME ? e.value : e.first.value);
-
-                  if(token.id != ',') break;
-                  next(',');
-              }
-              next(';');
-              this.first = names;
-/*              trace('* --- end var statement');*/
-              return this;
-          },
-          bpow:0,
-          toString:function():String {
-              return '(var '+ this.first + ')';
-          },
-          codegen:function():Void{            
-            /*            trace("var codegen doesn't do anything; it's just a marker.");*/
-            /* TODO: codegen should prefix locals with LOCAL opcode(TBD) */
-            C(this.first, true);
-          }
-      };
+        symtab['if'].codegen=function():Void {
+			C(untyped this.first); // test
+	  
+			var patch_if:Void->Void = emit_jump_returning_patcher(JUMPFALSE);
+			C(untyped this.second);
+			patch_if();
+	  
+			if(untyped this.third) {
+				var patch_else:Void->Void = emit_jump_returning_patcher(JUMP);
+				patch_if();
+				C(untyped this.third);
+				patch_else();  // rewrite @else to point after "if{...}else{...}" instructions.
+			}
+        };        
       
-      /*
+
+		symtab['while'] = new Symbol();
+		symtab['while'].std = function():Dynamic {
+			next('(');
+			var cond:Dynamic = expression(0);
+			next(')');
+			next('{');
+			var block:Array<Dynamic> = statements();
+			next('}');
+			untyped this.first = cond;
+			untyped this.second = block;
+			return untyped this;
+		};
+			
+		symtab['while'].bpow = 0;
+		symtab['while'].codegen = function():Void {
+		  var emit_backjump_to_test:Void->Void = backjumper(JUMP);
+		  C(untyped this.first);
+		  var patch_jump_over_body:Void->Void = emit_jump_returning_patcher(JUMPFALSE);
+		  C(untyped this.second);
+		  emit_backjump_to_test();
+		  patch_jump_over_body();
+		};          
+      
+
+
+		symtab['for'] = new Symbol();
+		symtab['for'].std = function():Dynamic {
+			// for (initial-expr ; test-expr ; final-expr ) { body }
+			next('(');
+			var init:Dynamic = expression(0);
+			next(';');
+			var test:Dynamic = expression(0);
+			next(';');
+			var modify:Dynamic = expression(0);
+			next(')');
+			next('{');
+			var block:Array<Dynamic> = statements();
+			next('}');
+			untyped this.first = [init,test,modify];
+			untyped this.second = block;
+	   
+			return untyped this; // UNTESTED
+		};
+		symtab['for'].bpow = 0;
+                                                        // "for(i = 0; i < 10; i++) { trace(i); }"
+		symtab['for'].codegen = function():Void{
+		  C(untyped this.first[0]);                         // i = 0
+		  var backjump_to_test:Void->Void = backjumper(JUMP);
+		  C(untyped this.first[1]);                         // i < 10
+		  var jumpfalse_to_here:Void->Void = emit_jump_returning_patcher(JUMPFALSE);
+		  C(untyped this.second);                           // trace(i);
+		  C(untyped this.first[2]);                         // i ++
+		  backjump_to_test();                       // } --> JUMP to i < 10
+		  jumpfalse_to_here();                      // patch the JUMPFALSE after "i<10" 
+		};
+			
+		
+		symtab['var'] = new Symbol();
+		symtab['var'].std = function():Dynamic {
+/*            trace('* var statement');*/
+			var e:Dynamic, names:Array<Dynamic> = [];
+			while(true){
+				e = expression(0);
+				if(e.id != '=' && e.id != ID_NAME) { 
+					throw('Unexpected intializer ' + e + ' in var statement :' + offending_line(untyped this.from));
+				}
+				names.push(e);
+				// here's one place where static typing would have saved me trouble:
+/*                  scope_define(e.id == 'NAME' ? e.id : e.first.id)*/
+				scope_define(e.type == TName ? e.value : e.first.value);
+
+				if(token.id != ',') break;
+				next(',');
+			}
+			next(';');
+			untyped this.first = names;
+				/*trace('* --- end var statement');*/
+			return untyped this;
+		};
+		symtab['var'].bpow = 0;
+		symtab['var'].toString = function():String {
+		  return '(var '+ untyped this.first + ')';
+		};
+		symtab['var'].codegen = function():Void{            
+			/*            trace("var codegen doesn't do anything; it's just a marker.");*/
+			/* TODO: codegen should prefix locals with LOCAL opcode(TBD) */
+			C(untyped this.first, true);
+		};
+		
+      
+		/*
         await fn();
         doSomething(x(), await y());      
-      */
+		*/
         
-      symtab['await'] = {
+		symtab['await'] = new Symbol();
         // isStatement flag exists so we can clear the stack after statements like
         // "await promiseReturnsSomeValues();"
         // but not in expressions like 
         // "myArray = promiseReturnsSomeValues();"
         
-        isStatement : false, 
+		symtab['await'].isStatement = false;
         
-        expectFunctionCall:function():Void {
-            if(!this.first.isFunctionCall) throw "Expected function call after await";
-        },
+        symtab['await'].expectFunctionCall = function():Void {
+            if(!untyped this.first.isFunctionCall) throw "Expected function call after await";
+        };
         
-        std:function():Dynamic {
-          this.isStatement = true;
-          this.first = statement();
-          this.expectFunctionCall();
-          return this;
-        },
+        symtab['await'].std = function():Dynamic {
+			untyped this.isStatement = true;
+			untyped this.first = statement();
+			untyped this.expectFunctionCall();
+			return untyped this;
+        };
         
-        nud:function():Dynamic {
-          this.first = expression(0);
-          this.expectFunctionCall();
-          return this;
-        },
+        symtab['await'].nud=function():Dynamic {
+			untyped this.first = expression(0);
+			untyped this.expectFunctionCall();
+			return untyped this;
+        };
         
-        codegen:function():Void {
-			if (this.isStatement) emit(VM.MARK);
-			C(this.first);  // There should be an async method call somewhere in this subtree, 
+        symtab['await'].codegen=function():Void {
+			if (untyped this.isStatement) emit(MARK);
+			C(untyped this.first);  // There should be an async method call somewhere in this subtree, 
                           // which will leave a Promise on the stack.
                          
-			emit(VM.AWAIT); // AWAIT will then consume the Promise; its fulfillment will resume the VM
+			emit(AWAIT); // AWAIT will then consume the Promise; its fulfillment will resume the VM
                           // with one value on the stack.
                           // if (this.first) consumed it, fine; in case it hasn't, clear to the mark:
                           
-          if(this.isStatement) emit(VM.CLEARTOMARK);
-        }
-      }
+			if(untyped this.isStatement) emit(CLEARTOMARK);
+        };
     }
+    
 
      // return the text of the source-code line containing a given character offset (which offset we originally got from the lexer)
      public function offending_line(near:Int=-1):String {

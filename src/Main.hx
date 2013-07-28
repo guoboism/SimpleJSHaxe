@@ -13,6 +13,7 @@ import sjs.data.Token;
 import sjs.util.ANSI;
 import sjs.Lexer;
 import sjs.Parser;
+import sjs.Interpreter;
 
 /**
  * ...
@@ -56,7 +57,7 @@ class Main extends Sprite
 		tf.text = "Hello World";
 		
 		
-		//
+		/*
 		var startTime;
 		startTime = Lib.getTimer();
 		
@@ -66,6 +67,10 @@ class Main extends Sprite
 		trace((Lib.getTimer() - startTime) / 1000);
 		
 		//0.873
+		*/
+		
+		var ip:Interpreter = new Interpreter();
+		ip.doString("var m = 5 + 6 * 8;");
 		
 		// Stage:
 		// stage.stageWidth x stage.stageHeight @ stage.dpiScale
