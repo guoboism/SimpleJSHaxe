@@ -264,6 +264,14 @@ class Lexer {
 				c = src.charAt(i);
 			}
 		}
+		
+		
+		trace("Tokens--------------"); 
+		for (i in 0...result.length) {
+			trace(result[i].type + " : " + result[i].value); 
+		}
+		trace("--------------");
+		
 		return result;
 	}
 	

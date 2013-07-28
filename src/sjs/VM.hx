@@ -16,6 +16,9 @@ package sjs;
 	//import Promise;
 	import sjs.data.Token;
 	import sjs.util.ANSI;
+	import sjs.data.StackFrame;
+	import sjs.data.Symbol;
+	import sjs.data.VmFunc;
   
 	//import flash.utils.getDefinitionByName;
 	//import flash.utils.getQualifiedClassName;
@@ -153,12 +156,13 @@ package sjs;
 		*/
     
 		private function next_word() : Dynamic {
-			return current_call().next_word();
+			return call_stack[0].next_word();
 		}
-
+	
+		/* GB choose to not use this
 		private function current_call():StackFrame {//GB getter
 			return call_stack[0]; 
-		}
+		}*/
     
  
 		/***********************************************************
@@ -170,8 +174,13 @@ package sjs;
 		public function new() {
 			super();
 			
-			//registry = new Map<Dynamic,Dynamic>();//GB
+			registry = new Map<String,Dynamic>();//GB
 			vm_globals = new Map<String,Dynamic>();//GB
+			system_dicts = new Array < Map < String, Dynamic >> ();
+			call_stack = new Array<StackFrame>(); // function call stack    
+			os = new Array<Dynamic>();    // operand stack //GB to detect
+			marks = new Array<Dynamic>();
+			
 			
 			//setGlobal('trace', _vmUserTrace);//GB comment for now
 			setGlobal('halt', halt);
@@ -242,20 +251,23 @@ package sjs;
 			running = true;
 
 			while(cs.length > 0) {
-				while (cs.length > 0 && !current_call().exhausted && running) {
+				while (cs.length > 0 && !call_stack[0].exhausted && running) {
 					
-					//op = this[current_call().next_word()];
-					op = Reflect.field(this, current_call().next_word());
+					//op = this[call_stack[0].next_word()];
+					op = call_stack[0].next_word();
+					var opFunc:Dynamic = Reflect.field(this, op);
 					
-					if(!(op)) {
-						if(current_call().exhausted) continue;
-						else throw 'VM got unknown operator ``' + current_call().prev_word() + "''";
+					if(opFunc == null) {
+						if(call_stack[0].exhausted) continue;
+						else throw 'VM got unknown operator ' + call_stack[0].prev_word() + '';
 					}
 					
-					Reflect.callMethod(this,op,[]);//gb was 'op();'
+					
+					Reflect.callMethod(this, opFunc, []);//gb was 'op();'
+					
 					if(!running)  return; // bail from AWAIT instruction
 				}
-				cpop(); // automatically return at end of function even if no return statement
+				cpop();// automatically return at end of function even if no return statement
 			}
 			
 			running = false;
@@ -516,13 +528,13 @@ package sjs;
 
         //flow control
         private function JUMP():Void{ 
-            current_call().pc += next_word();
+            call_stack[0].pc += next_word();
         }
         private function JUMPFALSE():Void{ 
-            var prevpc:Int = current_call().pc;
+            var prevpc:Int = call_stack[0].pc;
             var offset:Int = next_word();
             if(!opop()) {
-                current_call().pc += offset;
+                call_stack[0].pc += offset;
             }
         }
 		
@@ -621,7 +633,7 @@ package sjs;
         // LIT m LOCAL -- declares m as a var in current scope
         private function LOCAL():Void {
           var key:String = opop();    
-          current_call().vars[key] = null;
+          call_stack[0].vars[key] = null;
         }
 
 

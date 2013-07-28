@@ -19,14 +19,15 @@ class Symbol extends Token
 	public var codegen:Dynamic;
 	
 	public var isPrefix:Bool;
-	public var fisrt:Dynamic;
+	public var first:Dynamic;
 	public var second:Dynamic;
 	public var isFunctionCall:Bool;
 	public var scope:Array<String>;
 	public var isStatement:Bool;
 	public var expectFunctionCall:Void->Void;
+	public var assignment:Bool;
 	
-	public function new(?led_:Dynamic->Dynamic,?nud_:Void->Dynamic,?std_:Void->Dynamic,?bpow_:Int) 
+	public function new(?led_:Dynamic->Dynamic,?nud_:Void->Dynamic,?std_:Void->Dynamic,?bpow_:Int = 0) 
 	{
 		super();
 		
@@ -36,15 +37,17 @@ class Symbol extends Token
 		std = std_;
 		bpow = bpow_;
 		
-		
-		
-		
+		toString = defaultToString;
 		
 		//{nud, led, std, bpow, codegen } associated with an id
 	}
 	
 	public function extendFromSymbol(s:Symbol):Void {
-		id = s.id; 
+		if (s == null) return; 
+		
+
+		
+		//id = s.id; 
 		led = s.led;
 		nud = s.nud;
 		std = s.std;
@@ -52,20 +55,27 @@ class Symbol extends Token
 		bpow = s.bpow;
 		codegen = s.codegen;
 		isPrefix = s.isPrefix;
-		fisrt = s.fisrt;
+		first = s.first;
 		second = s.second;
 		isFunctionCall = s.isFunctionCall;
 		scope = s.scope;
 		isStatement = s.isStatement;
 		expectFunctionCall = s.expectFunctionCall;
-		
+		assignment = s.assignment;
 	}
 	
 	public function extendFromToken(t:Token):Void {
+		if (t == null) return;
+		
 		value = t.value;
 		type = t.type;
 		from = t.from;
 		to = t.to;
+	}
+	
+	public function defaultToString():String {
+		return "Symbol: id " + id + " value " + value;
+		
 	}
 	
 }

@@ -1,4 +1,4 @@
-package sjs;
+package sjs.data;
   
 /* A function call frame, with its own program counter and local variables.
  Function calls are the only use of callframes in this VM.  (As opposed to org.sixsided.fith, which uses them for 

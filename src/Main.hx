@@ -70,7 +70,8 @@ class Main extends Sprite
 		*/
 		
 		var ip:Interpreter = new Interpreter();
-		ip.doString("var m = 5 + 6 * 8;");
+		ip.doString("var m = 5 + 8;");
+		trace("findVar m:" + ip.vm.findVar("m"));
 		
 		// Stage:
 		// stage.stageWidth x stage.stageHeight @ stage.dpiScale

@@ -1,7 +1,7 @@
 /*  Parser
 
   The class takes the unconventional (for AS3) step of defining a bunch of
-  "symbol" objects like untyped this:
+  "symbol" objects like untyped __this__:
   
     { bpow:an_int, nud: function() { ... }, led:function(){ ... }, std:function() { ... } }
   
@@ -66,11 +66,13 @@ package sjs;
 
     // public inline static var END_TOKEN :Dynamic = 
     public static function getEndToken():Dynamic {
-		return {id:'(end)', toString:function():String{return "*END*";}};
+		var tp:Symbol = new Symbol();
+		tp.id = '(end)';
+		tp.toString = function():String{return "*END*";}
+		return tp;
 	}
 	  
     public var ast:Dynamic;
-
 
     // debug cruft
     public var xd:Int = 0 ;
@@ -88,6 +90,8 @@ package sjs;
     ***********************************************************/
 	
     public function new() {
+		scopes = new Array<Array<String>>();
+		scopes.push(new Array<String>());
         init_symbols();
     }
       
@@ -99,13 +103,8 @@ package sjs;
 		token = null;
 		token_idx = 0;
 		source_code = src;
-
-		tokens = Lexer.tokenize(src);
 		
-		trace("Tokens:"); 
-		for (i in 0...tokens.length) {
-			trace(tokens[i].type + " : " + tokens[i].value); 
-		}
+		tokens = Lexer.tokenize(src);
 		
 		next();
 		ast = statements();
@@ -113,15 +112,21 @@ package sjs;
 	}
 
 	public function codegen(?src:String):Array<Dynamic>{
-	  if(src != null && src.length > 0) { parse(src);}
+		if(src != null && src.length > 0) { parse(src);}
 	  
-	  //log("##### CODE GENERATION ####\n", JSON.stringify(ast));
+		//log("##### CODE GENERATION ####\n", JSON.stringify(ast));
 	  
-	  generated_code = [];
-	  C(ast);
-	  log(['## GENERATED:', generated_code.join(" ")]);
-	  trace('## GENERATED:', generated_code.join(" "));
-	  return generated_code;
+		generated_code = [];
+		C(ast);
+		log(['## GENERATED:', generated_code.join(" ")]);
+		
+		trace('Generated Code-------------');
+		for (i in 0...generated_code.length) {
+			trace(i + " : " +generated_code[i]);
+		}
+		trace('-------------');
+		
+		return generated_code;
 	}
     
 	/***********************************************************
@@ -286,35 +291,40 @@ package sjs;
             token.id = token.value;
         }
         
+		if (token.id == ";") {
+			var n = "1";
+		}
 		
 		//create 
         //return _extend(token, symtab[token.id]); // clone FTW.  So what if it might be slow?   handles the this binding simply.
+
+		
 		token.extendFromSymbol(symtab[token.id]);
 		return token;
 	}
 
     public function infix_codegen(opcode:Dynamic):Void->Void { 
 		return function():Void { 
-			C(untyped this.first); 
-			C(untyped this.second); 
-			emit(opcode); 
+			C(untyped __this__.first); 
+			C(untyped __this__.second); 
+			emit(opcode);
 		};
     }
 
 
     public function infix_thunk_rhs_codegen(opcode:Dynamic):Void->Void { 
 		return function():Void { 
-			C(untyped this.first);
+			C(untyped __this__.first);
 			// delay evaluation of second child by wrapping it in an array literal
 			emit(LIT);
-			emit(codegen_block(untyped this.second));
+			emit(codegen_block(untyped __this__.second));
 			emit(opcode);
 			};
     }
     
 
     public function prefix_codegen(opcode:Dynamic):Void->Void  { 
-		return function():Void { C(untyped this.first); emit(opcode); };
+		return function():Void { C(untyped __this__.first); emit(opcode); };
     }
 
 
@@ -327,14 +337,14 @@ package sjs;
     public function infix(sym:String, bpow:Int, opcode:Dynamic) : Dynamic {
       
         function leftDenotation(lhs:Dynamic):Dynamic {
-			untyped this.first = lhs;
-			untyped this.second = expression(untyped this.bpow);
-			return untyped this;
+			untyped __this__.first = lhs;
+			untyped __this__.second = expression(untyped __this__.bpow);
+			return untyped __this__;
         }
         
         symtab[sym] = new Symbol();
 		symtab[sym].led = leftDenotation;
-		symtab[sym].codegen=infix_codegen(opcode);
+		symtab[sym].codegen = infix_codegen(opcode);
 		symtab[sym].bpow = bpow;
 		
 		return symtab[sym];
@@ -345,9 +355,9 @@ package sjs;
 		
 		symtab[sym] = new Symbol();
 		symtab[sym].led = function(lhs:Dynamic):Dynamic {
-										untyped this.first = lhs;
-										untyped this.second = expression(untyped this.bpow);
-										return untyped this;
+										untyped __this__.first = lhs;
+										untyped __this__.second = expression(untyped __this__.bpow);
+										return untyped __this__;
 									}
 									
 		symtab[sym].codegen = infix_thunk_rhs_codegen(opcode);
@@ -362,8 +372,8 @@ package sjs;
         var s:Dynamic = symbol(sym);
         s.bpow = s.bpow !=0 ? s.bpow:140;  // don't want infix - to get a higher precedence than *, for example.
         s.nud = function():Dynamic {
-            untyped this.first = expression(0);
-            return untyped this;
+            untyped __this__.first = expression(0);
+            return untyped __this__;
         };
         s.codegen = prefix_codegen(opcode);
     }
@@ -375,30 +385,30 @@ package sjs;
         sym.bpow = bpow;
       
       
-        var mutate:Bool = operation == null ? true : false;    // operation is "+" for +=, "-" for -=, etc; and null for "=". 
+        var mutate:Bool = operation != null ? true : false;    // operation is "+" for +=, "-" for -=, etc; and null for "=". 
       
         sym.led = function(lhs:Dynamic):Dynamic {
-                                    sym.first = lhs;
-                                    sym.second = expression(untyped this.bpow - 1 );  /* drop the bpow by one to be right-associative */
-                                    sym.assignment = true;
-                                    return sym;
+                                    untyped __this__.first = lhs;
+                                    untyped __this__.second = expression(untyped __this__.bpow - 1 );  /* drop the bpow by one to be right-associative */
+                                    untyped __this__.assignment = true;
+                                    return untyped __this__;
                                 };
 
         sym.codegen = function():Void {
             if(mutate) {                                    
                 // do the operation     // if it's "x += 3", then...
-                C(untyped this.first);          // LIT x
-                C(untyped this.second);         // VAL 3
+                C(untyped __this__.first);          // LIT x
+                C(untyped __this__.second);         // VAL 3
                 emit(operation);        // ADD
             } else {
                 // just emit the value   // if it's "x = 3", then:  LIT 3
-                C(untyped this.second);
+                C(untyped __this__.second);
             }
 
             //assign it to the lhs
-            C(untyped this.first, true);        // LIT x 
+            C(untyped __this__.first, true);        // LIT x 
 
-            if(untyped this.first.id=='.') {
+            if(untyped __this__.first.id=='.') {
                 // e.g. for "point.x += 3", change the opcode from:
                 //    VAL point LIT x GETINDEX LIT 3 ADD    VAL point LIT x GETINDEX
                 // to:                                                      ^^^
@@ -419,18 +429,18 @@ package sjs;
 		symtab[id].bpow = bpow;
 		symtab[id].isPrefix = false;
 		symtab[id].led = function(lhs:Dynamic) : Dynamic {
-			untyped this.first = lhs;
-			return untyped this;
+			untyped __this__.first = lhs;
+			return untyped __this__;
 		};
 			  
 			  
         symtab[id].nud = function():Dynamic {
 			// next must be variable name
 			if(token.id == ID_NAME) {
-				untyped this.first = token;
-				untyped this.isPrefix = true;
+				untyped __this__.first = token;
+				untyped __this__.isPrefix = true;
 				next();
-				return this;
+				return untyped __this__;
 			} else {
 				throw "Expected ID_NAME after ++ operator";
 			}
@@ -439,17 +449,17 @@ package sjs;
 			  
         symtab[id].codegen = function() : Void {
 			// increment the variable, leaving a copy of its previous value on the stack.
-			if(untyped this.isPrefix) {
-				C(untyped this.first);
+			if(untyped __this__.isPrefix) {
+				C(untyped __this__.first);
 				emitMulti([LIT, 1, opcode]); 
 				emit(DUP);
-				C(untyped this.first, true);
+				C(untyped __this__.first, true);
 				emit(PUT);
 			} else /* postfix */ {
-				C(untyped this.first);
+				C(untyped __this__.first);
 				emit(DUP);
 				emitMulti([LIT, 1, opcode]); 
-				C(untyped this.first, true);
+				C(untyped __this__.first, true);
 				emit(PUT);
 			}
 		};
@@ -462,13 +472,13 @@ package sjs;
     public function constant(id:String, v:Dynamic) : Dynamic {
 		symtab[id] = new Symbol(null,
 			function():Dynamic{ 
-				untyped this.value = v;
-				return this;
+				untyped __this__.value = v;
+				return untyped __this__;
 			},
 			null, 0);
 		
 		symtab[id].codegen = function():Void {
-            emit_lit(untyped this.value);
+            emit_lit(untyped __this__.value);
         }
 	  
 		return symtab[id];
@@ -549,93 +559,96 @@ package sjs;
     }
 	
 	public function emitMulti(opcodes:Array<Dynamic>): Void {
-      for(i in 0...opcodes.length){
-          generated_code.push(opcodes[i]);
-      }
+		for(i in 0...opcodes.length){
+			generated_code.push(opcodes[i]);
+		}
     }
 
     public function remit(token:Dynamic):Void {
-      generated_code.pop();
-      emit(token);
+		generated_code.pop();
+		emit(token);
     }
 
     public function emit_lit(v:Dynamic):Void {
-      emit('LIT');
-      emit(v);
+		emit('LIT');
+		emit(v);
     }
 
     public function emit_prefix(node:Dynamic, op:Dynamic):Void {
-      C(node); emit(op);
+		C(node); 
+		emit(op);
     }
     public function emit_infix(n1:Dynamic, n2:Dynamic, op:Dynamic):Void {
-      C(n1); C(n2); emit(op);
+		C(n1); 
+		C(n2); 
+		emit(op);
     }
 
     // usage = j = emit_jump_returning_patcher(JUMPFALSE); ... emit a bunch of stuff ... j();
     // opcodes are:  JUMP|JUMPFALSE <offset>
     // The offset is from the address of JUMPFALSE, not of <offset>
-  public function emit_jump_returning_patcher(opcode:Dynamic):Void->Void {
-      emit(opcode);
-      var here:Int = generated_code.length;
-      function patcher():Void { 
-        generated_code[here] = generated_code.length - here - 1; // decrement to factor in the <offset> literal
-      }
-      emit('@patch'); // placeholder @here
-      return patcher;
-  }
+	public function emit_jump_returning_patcher(opcode:Dynamic):Void->Void {
+		emit(opcode);
+		var here:Int = generated_code.length;
+		function patcher():Void { 
+			generated_code[here] = generated_code.length - here - 1; // decrement to factor in the <offset> literal
+		}
+		emit('@patch'); // placeholder @here
+		return patcher;
+	}
           
           
-  public function backjumper(opcode:Dynamic):Void->Void {
-      // opcodes emitted:  JUMP|JUMPFALSE <offset>
-      // currently uses only JUMP, but will need JUMPFALSE to support "do { ... } while(test)" semantics    (TBD)
-      var here:Int = generated_code.length;
-      return function():Void { 
-        emit(opcode);
-        var offset:Int = here - generated_code.length - 1; // decrement to factor in the <offset> literal
-        emit(offset);
-      }
-  }
+	public function backjumper(opcode:Dynamic):Void->Void {
+		// opcodes emitted:  JUMP|JUMPFALSE <offset>
+		// currently uses only JUMP, but will need JUMPFALSE to support "do { ... } while(test)" semantics    (TBD)
+		var here:Int = generated_code.length;
+		return function():Void { 
+			emit(opcode);
+			var offset:Int = here - generated_code.length - 1; // decrement to factor in the <offset> literal
+			emit(offset);
+		}
+	}
           
     // public var drops_needed:Int = 0;                 // fixme: this seems really incorrect.  take multiple assignment out?
     // public function need_drop():Void { drops_needed++; }  // see assignment()  ^^^... no, make codegen return and concat arrays recursively
     
     public function C(node:Dynamic, is_lhs:Bool=false):Void {  
-      if(!node) {
-        trace('empty node reached');
-        return;
-      }
+		if(!node) {
+			trace('empty node reached');
+			return;
+		}
  
-      // TODO: if multiple assignment: MARK .. C ... CLEARTOMARK
+		// TODO: if multiple assignment: MARK .. C ... CLEARTOMARK
       
-       if(Std.is(node, Array)) { // statements or argument lists
-        for(i in 0...node.length) {
-            C(node[i], is_lhs);
-            /*emit(DROPALL);*/
-            // we might need to drop some leftover values from a multiple assignment
-            // while(drops_needed > 0) { 
-            //   log('emitting drop after multiple assignment,', drops_needed, 'remaining');
-            //   emit(DROP);
-            //   drops_needed--;
-            // }
-        }
-      } else {
-        if(!node.hasOwnProperty('codegen')) { 
-          throw 'No Codegen for '+node.name+'#'+node.id+'='+node.value;
-        } else {
-          node.codegen(is_lhs);
-        }
-      }
+		if(Std.is(node, Array)) { // statements or argument lists
+			for(i in 0...node.length) {
+				C(node[i], is_lhs);
+				/*emit(DROPALL);*/
+				// we might need to drop some leftover values from a multiple assignment
+				// while(drops_needed > 0) { 
+				//   log('emitting drop after multiple assignment,', drops_needed, 'remaining');
+				//   emit(DROP);
+				//   drops_needed--;
+				// }
+			}
+		} else {
+			if(!node.hasOwnProperty('codegen')) { 
+				throw 'No Codegen for '+node.name+'#'+node.id+'='+node.value;
+			} else {
+				node.codegen(is_lhs);
+			}
+		}
     }
     
     
     // for code like " a { b c } d  ", return [a, [b, c], d]
     public function codegen_block(node:Dynamic):Dynamic{
-      var orig_code:Array<Dynamic> = generated_code;
-      generated_code = [];
-      C(node);
-      var block_code:Array<Dynamic> = generated_code;
-      generated_code = orig_code;
-      return block_code;
+		var orig_code:Array<Dynamic> = generated_code;
+		generated_code = [];
+		C(node);
+		var block_code:Array<Dynamic> = generated_code;
+		generated_code = orig_code;
+		return block_code;
     }
     
 
@@ -665,7 +678,6 @@ package sjs;
         //     throw new Error('tried to redefine variable ' + existing_name + ' in line "' + offending_line() + '"');
         //   }
         // }
-		
         scopes[0].push(name); // FIXME, throw an error if it's already defined 
     }
 	  
@@ -707,13 +719,13 @@ package sjs;
 		constant('false', false);
 		
 		//primitives
-		symtab[ID_NAME] = new Symbol(null,function():Dynamic {return this;},null);
-		symtab[ID_NAME].toString = function():String { return untyped this.value; };
-        symtab[ID_NAME].codegen = function(am_lhs:Bool):Void {  emitMulti([am_lhs ? 'LIT' : 'VAL', untyped this.value]); };  // need a reference if we're assigning to the var; the value otherwise.
+		symtab[ID_NAME] = new Symbol(null,function():Dynamic {return untyped __this__;},null);
+		symtab[ID_NAME].toString = function():String { return untyped __this__.value; };
+        symtab[ID_NAME].codegen = function(am_lhs:Bool):Void {  emitMulti([am_lhs ? 'LIT' : 'VAL', untyped __this__.value]); };  // need a reference if we're assigning to the var; the value otherwise.
       
-		symtab[ID_LITERAL] = new Symbol(null, function():Dynamic {return this;}, null,0);
-		symtab[ID_LITERAL].toString = function():String { return untyped this.value; };
-		symtab[ID_LITERAL].codegen = function():Void { emit_lit(untyped this.value); };
+		symtab[ID_LITERAL] = new Symbol(null, function():Dynamic {return untyped __this__;}, null,0);
+		symtab[ID_LITERAL].toString = function():String { return untyped __this__.value; };
+		symtab[ID_LITERAL].codegen = function():Void { emit_lit(untyped __this__.value); };
   
 		//assignment
 		// fixme: and here we see why V K SWAP SET is more consistent than V K PUT
@@ -735,10 +747,10 @@ package sjs;
 
 		// tbd: different codegens by arity?
 		symtab['-'].codegen = function():Void { 
-			if(untyped this.second) 
-				emit_infix(untyped this.first, untyped this.second, SUB);
+			if(untyped __this__.second) 
+				emit_infix(untyped __this__.first, untyped __this__.second, SUB);
 			else {
-				emit_prefix(untyped this.first, NEG);
+				emit_prefix(untyped __this__.first, NEG);
 			}
 		};
         
@@ -766,12 +778,12 @@ package sjs;
 		// where dot has stack effect ( o k -- o[k] )
 		// a.b.c.d = e -- $ e $a # b dot # c dot # d dot dict 
 		symtab['.'].codegen = function(is_lhs:Bool /* assignment? */):Void {
-			if(untyped this.first.id != '.') {
-				C(untyped this.first, false); // use VAL
+			if(untyped __this__.first.id != '.') {
+				C(untyped __this__.first, false); // use VAL
 			} else {
-				C(untyped this.first, true);  // use LIT
+				C(untyped __this__.first, true);  // use LIT
 			}
-			C(untyped this.second, true); // treat as LHS until the last item in the dot-chain
+			C(untyped __this__.second, true); // treat as LHS until the last item in the dot-chain
 			emit(GETINDEX);
 		};
             
@@ -780,18 +792,18 @@ package sjs;
 		symbol('new').bpow = 160;
 		symbol('new').nud = function():Dynamic {
 			if(token.type != TName) throw("Expected name after new operator, got " + token.value + " in: " + offending_line());
-			untyped this.first = token;
+			untyped __this__.first = token;
 			next(/*constructor*/);
 			next('(');
-			untyped this.second = token.id == ')' ? [] : parse_argument_list();
+			untyped __this__.second = token.id == ')' ? [] : parse_argument_list();
 			next(')');
-			return untyped this;
+			return untyped __this__;
 		};
 		
 		symbol('new').codegen = function():Void {
-			emit_lit(untyped this.first.value);
+			emit_lit(untyped __this__.first.value);
 			emit(MARK);
-			C(untyped this.second);
+			C(untyped __this__.second);
 			emit(ARRAY);
 			emit(NATIVE_NEW);   // ( constructor [args] -- instance )
 		};
@@ -805,12 +817,12 @@ package sjs;
 			return expr;
         };
 		symtab['('].led = function(lhs:Dynamic):Dynamic{
-			untyped this.first = lhs;
+			untyped __this__.first = lhs;
 			// will be on '('
-			untyped this.second = parse_argument_list();
+			untyped __this__.second = parse_argument_list();
 			next(')');
-			untyped this.isFunctionCall = true;
-			return untyped this;
+			untyped __this__.isFunctionCall = true;
+			return untyped __this__;
         };
         symtab['('].codegen = function():Void {
 			/*// recurse and find "..." async in argument list?
@@ -823,9 +835,9 @@ package sjs;
 		  
 			/*var isAsync:Bool = this.second.some(isEllipsis);*/
 
-			C(untyped this.first);
+			C(untyped __this__.first);
 			emit(MARK);
-			C(untyped this.second);
+			C(untyped __this__.second);
 			emit(ARRAY);
 			emit(CALL);
 
@@ -849,7 +861,7 @@ package sjs;
 				};
 
 				scope_push();
-				untyped this.scope = scopes[0];
+				untyped __this__.scope = scopes[0];
 				next('(');
 				if(token.id != ')') {
 					args = parse_argument_list();
@@ -863,11 +875,11 @@ package sjs;
 
 				scope_pop();
 
-				untyped this.first = fn_name;
-				untyped this.second = args;
-				untyped this.third = body;
+				untyped __this__.first = fn_name;
+				untyped __this__.second = args;
+				untyped __this__.third = body;
 
-				return untyped this;
+				return untyped __this__;
 			},
 			
 			function():Dynamic {
@@ -879,7 +891,7 @@ package sjs;
             
 				scope_define(fn_name.value);
 				scope_push();
-				untyped this.scope = scopes[0];
+				untyped __this__.scope = scopes[0];
 				next('(');
 				if(token.id != ')') {
 					args = parse_argument_list();
@@ -891,12 +903,12 @@ package sjs;
   
 				scope_pop();
        
-				untyped this.first = fn_name;
-				untyped this.second = args;
-				untyped this.third = body;
+				untyped __this__.first = fn_name;
+				untyped __this__.second = args;
+				untyped __this__.third = body;
       
       
-				return this;
+				return untyped __this__;
 			},
 		0);
 			
@@ -924,17 +936,17 @@ package sjs;
 			// function f(a) { var v; trace(v); }  -->   <MARKER> LIT f MARK LIT a LIT v LOCAL ARRAY LIT trace MARK LIT v ARRAY CALL ] <CLOSURE>
           
 			// function name literal
-			emit_lit(untyped this.first.value);
+			emit_lit(untyped __this__.first.value);
           
 			// arguments
 			emit(MARK);
-			C(untyped this.second, true);
+			C(untyped __this__.second, true);
 			emit(ARRAY);
           
 			// tbd: fix this hack to create locals at the beginning of a function's code block
-			var body:Array<Dynamic> = codegen_block(untyped this.third);
+			var body:Array<Dynamic> = codegen_block(untyped __this__.third);
 			
-			var tpScope:Array<String> = untyped this.scope;
+			var tpScope:Array<String> = untyped __this__.scope;
 			for(v in tpScope) { body.unshift(LOCAL); body.unshift(v); body.unshift(LIT); }
 
 			emit(LIT);
@@ -943,7 +955,7 @@ package sjs;
           
 			//emit(MARK); emit(EVAL_OFF); body.forEach(emit1); emit(EVAL_ON); emit(ARRAY);  // not the greatest idea
 			emit(CLOSURE);
-			if(!untyped this.first.isAnonymous) {
+			if(!untyped __this__.first.isAnonymous) {
 				/*trace('emitting drop for named function codegen');*/
 				emit(DROP); // anon function will presumably be assigned to something... although, wait, this kills the module pattern: (function(){...})()
 			}
@@ -956,14 +968,14 @@ package sjs;
 		symtab['return'].std = function():Dynamic {            
 			// peek at next token to see if this is "return;" as opposed to "return someValue;"
 			if(token.id != ';') {
-				untyped this.first = expression(0);
+				untyped __this__.first = expression(0);
 			}
 			next(';');
-			return untyped this;
+			return untyped __this__;
 		};
 		
 		symtab['return'].codegen=function():Void {
-				C(untyped this.first);
+				C(untyped __this__.first);
 				emit(RETURN);
         };
 		
@@ -980,33 +992,33 @@ package sjs;
 				}
 			}
 			next(']');
-			untyped this.first = a;
+			untyped __this__.first = a;
 		  
-			untyped this.subscripting = false;
-			return untyped this;
+			untyped __this__.subscripting = false;
+			return untyped __this__;
 		};
 		
 		symtab['['].led = function(lhs:Dynamic):Dynamic{
-			untyped this.first = lhs;  // "y"
+			untyped __this__.first = lhs;  // "y"
 			// will be on '['
-				untyped this.second = expression(0); // "z"
+				untyped __this__.second = expression(0); // "z"
 			next(']');
 
-			untyped this.subscripting = true;
-			return untyped this;
+			untyped __this__.subscripting = true;
+			return untyped __this__;
         };
 		
-		symtab['['].toString = function():String { return "(array " + untyped this.first + ")"; };
+		symtab['['].toString = function():String { return "(array " + untyped __this__.first + ")"; };
 		symtab['['].bpow = 160;
 		symtab['['].codegen = function(is_lhs:Bool = false):Void { 
-            if(untyped this.subscripting) {
-              //untyped this.first could be a variable name or a literal array, e.g.  [1,2,3][0];  getArray()[0]
+            if(untyped __this__.subscripting) {
+              //untyped __this__.first could be a variable name or a literal array, e.g.  [1,2,3][0];  getArray()[0]
               //we want to throw whatever it is on the stack, then getIndex it.
-              C(untyped this.first, false); // use VAL, in "x = y[z]", we want the value of y on the stack
-              C(untyped this.second, false); // treat as RHS...      // FIXME: a[i] = n fails by using PUTINDEX
+              C(untyped __this__.first, false); // use VAL, in "x = y[z]", we want the value of y on the stack
+              C(untyped __this__.second, false); // treat as RHS...      // FIXME: a[i] = n fails by using PUTINDEX
               emit(is_lhs ? PUTINDEX : GETINDEX);
             } else {
-              emit('MARK'); C(untyped this.first); emit('ARRAY');
+              emit('MARK'); C(untyped __this__.first); emit('ARRAY');
             }
         };
 
@@ -1029,11 +1041,11 @@ package sjs;
               next();
             }
             next('}');
-            untyped this.first = obj;
-            return untyped this;
+            untyped __this__.first = obj;
+            return untyped __this__;
          };
 		 
-         symtab['{'].codegen = function():Void { emit('MARK'); C_hash(untyped this.first);  emit('HASH'); };
+         symtab['{'].codegen = function():Void { emit('MARK'); C_hash(untyped __this__.first);  emit('HASH'); };
 		
 
 		/***********************************************************
@@ -1051,31 +1063,31 @@ package sjs;
               next('{');
               var then_block:Array<Dynamic> = statements();
               next('}');
-              untyped this.first = cond;
-              untyped this.second = then_block;
+              untyped __this__.first = cond;
+              untyped __this__.second = then_block;
         
               // trace(token);
               if(token.id == ID_NAME && token.value == 'else') {
                 next(); // skip else
                 var t:Dynamic = token;
-                untyped this.third = t.value == 'if' ? statement() : block( /* eats  { and } */);
+                untyped __this__.third = t.value == 'if' ? statement() : block( /* eats  { and } */);
                 // what if the next statement's another if?
               }
-              return untyped this;
+              return untyped __this__;
         };
         symtab['if'].bpow = 0;
 
         symtab['if'].codegen=function():Void {
-			C(untyped this.first); // test
+			C(untyped __this__.first); // test
 	  
 			var patch_if:Void->Void = emit_jump_returning_patcher(JUMPFALSE);
-			C(untyped this.second);
+			C(untyped __this__.second);
 			patch_if();
 	  
-			if(untyped this.third) {
+			if(untyped __this__.third) {
 				var patch_else:Void->Void = emit_jump_returning_patcher(JUMP);
 				patch_if();
-				C(untyped this.third);
+				C(untyped __this__.third);
 				patch_else();  // rewrite @else to point after "if{...}else{...}" instructions.
 			}
         };        
@@ -1089,17 +1101,17 @@ package sjs;
 			next('{');
 			var block:Array<Dynamic> = statements();
 			next('}');
-			untyped this.first = cond;
-			untyped this.second = block;
-			return untyped this;
+			untyped __this__.first = cond;
+			untyped __this__.second = block;
+			return untyped __this__;
 		};
 			
 		symtab['while'].bpow = 0;
 		symtab['while'].codegen = function():Void {
 		  var emit_backjump_to_test:Void->Void = backjumper(JUMP);
-		  C(untyped this.first);
+		  C(untyped __this__.first);
 		  var patch_jump_over_body:Void->Void = emit_jump_returning_patcher(JUMPFALSE);
-		  C(untyped this.second);
+		  C(untyped __this__.second);
 		  emit_backjump_to_test();
 		  patch_jump_over_body();
 		};          
@@ -1119,20 +1131,20 @@ package sjs;
 			next('{');
 			var block:Array<Dynamic> = statements();
 			next('}');
-			untyped this.first = [init,test,modify];
-			untyped this.second = block;
+			untyped __this__.first = [init,test,modify];
+			untyped __this__.second = block;
 	   
-			return untyped this; // UNTESTED
+			return untyped __this__; // UNTESTED
 		};
 		symtab['for'].bpow = 0;
                                                         // "for(i = 0; i < 10; i++) { trace(i); }"
 		symtab['for'].codegen = function():Void{
-		  C(untyped this.first[0]);                         // i = 0
+		  C(untyped __this__.first[0]);                         // i = 0
 		  var backjump_to_test:Void->Void = backjumper(JUMP);
-		  C(untyped this.first[1]);                         // i < 10
+		  C(untyped __this__.first[1]);                         // i < 10
 		  var jumpfalse_to_here:Void->Void = emit_jump_returning_patcher(JUMPFALSE);
-		  C(untyped this.second);                           // trace(i);
-		  C(untyped this.first[2]);                         // i ++
+		  C(untyped __this__.second);                           // trace(i);
+		  C(untyped __this__.first[2]);                         // i ++
 		  backjump_to_test();                       // } --> JUMP to i < 10
 		  jumpfalse_to_here();                      // patch the JUMPFALSE after "i<10" 
 		};
@@ -1145,7 +1157,7 @@ package sjs;
 			while(true){
 				e = expression(0);
 				if(e.id != '=' && e.id != ID_NAME) { 
-					throw('Unexpected intializer ' + e + ' in var statement :' + offending_line(untyped this.from));
+					throw('Unexpected intializer ' + e + ' in var statement :' + offending_line(untyped __this__.from));
 				}
 				names.push(e);
 				// here's one place where static typing would have saved me trouble:
@@ -1156,18 +1168,18 @@ package sjs;
 				next(',');
 			}
 			next(';');
-			untyped this.first = names;
+			untyped __this__.first = names;
 				/*trace('* --- end var statement');*/
-			return untyped this;
+			return untyped __this__;
 		};
 		symtab['var'].bpow = 0;
 		symtab['var'].toString = function():String {
-		  return '(var '+ untyped this.first + ')';
+		  return '(var '+ untyped __this__.first + ')';
 		};
 		symtab['var'].codegen = function():Void{            
 			/*            trace("var codegen doesn't do anything; it's just a marker.");*/
 			/* TODO: codegen should prefix locals with LOCAL opcode(TBD) */
-			C(untyped this.first, true);
+			C(untyped __this__.first, true);
 		};
 		
       
@@ -1185,32 +1197,32 @@ package sjs;
 		symtab['await'].isStatement = false;
         
         symtab['await'].expectFunctionCall = function():Void {
-            if(!untyped this.first.isFunctionCall) throw "Expected function call after await";
+            if(!untyped __this__.first.isFunctionCall) throw "Expected function call after await";
         };
         
         symtab['await'].std = function():Dynamic {
-			untyped this.isStatement = true;
-			untyped this.first = statement();
-			untyped this.expectFunctionCall();
-			return untyped this;
+			untyped __this__.isStatement = true;
+			untyped __this__.first = statement();
+			untyped __this__.expectFunctionCall();
+			return untyped __this__;
         };
         
         symtab['await'].nud=function():Dynamic {
-			untyped this.first = expression(0);
-			untyped this.expectFunctionCall();
-			return untyped this;
+			untyped __this__.first = expression(0);
+			untyped __this__.expectFunctionCall();
+			return untyped __this__;
         };
         
         symtab['await'].codegen=function():Void {
-			if (untyped this.isStatement) emit(MARK);
-			C(untyped this.first);  // There should be an async method call somewhere in this subtree, 
+			if (untyped __this__.isStatement) emit(MARK);
+			C(untyped __this__.first);  // There should be an async method call somewhere in this subtree, 
                           // which will leave a Promise on the stack.
                          
 			emit(AWAIT); // AWAIT will then consume the Promise; its fulfillment will resume the VM
                           // with one value on the stack.
                           // if (this.first) consumed it, fine; in case it hasn't, clear to the mark:
                           
-			if(untyped this.isStatement) emit(CLEARTOMARK);
+			if(untyped __this__.isStatement) emit(CLEARTOMARK);
         };
     }
     

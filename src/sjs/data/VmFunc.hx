@@ -1,4 +1,4 @@
-package sjs;
+package sjs.data;
   class VmFunc {
     public var name:String;
     public var body:Array<Dynamic>; // of *
