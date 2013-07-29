@@ -120,11 +120,13 @@ package sjs;
 		C(ast);
 		log(['## GENERATED:', generated_code.join(" ")]);
 		
+		
 		trace('Generated Code-------------');
 		for (i in 0...generated_code.length) {
 			trace(i + " : " +generated_code[i]);
 		}
 		trace('-------------');
+		
 		
 		return generated_code;
 	}

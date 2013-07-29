@@ -1,5 +1,6 @@
 package ;
 
+import flash.display.MovieClip;
 import flash.display.Sprite;
 import flash.display.StageAlign;
 import flash.display.StageScaleMode;
@@ -57,21 +58,36 @@ class Main extends Sprite
 		tf.text = "Hello World";
 		
 		
-		/*
+		
+		var ip:Interpreter = new Interpreter();
+		
+		var dict:Map<String, Dynamic> = new Map<String, Dynamic>();
+		dict["MovieClip"] = MovieClip;
+		dict["testAPI"] = testAPI;
+		ip.pushDict(dict);
+		
 		var startTime;
 		startTime = Lib.getTimer();
 		
-		for(i in 0...1000000){
-			var res:Array<Token> = Lexer.tokenize("var s = 0; s = s + 100;");
+		/*
+		for(i in 0...100000){
+			ip.doString("var n = 7 + 2 * 15;");
 		}
-		trace((Lib.getTimer() - startTime) / 1000);
 		
-		//0.873
+		trace((Lib.getTimer() - startTime));
 		*/
 		
-		var ip:Interpreter = new Interpreter();
-		ip.doString("var m = 5 + 8;");
+		ip.doString("var m = 5 + 6 * 8;");
+		ip.doString("var n = m + 1;");
+		ip.doString("var a = 6;\rwhile(a<1000){a=a+1;}");
+		ip.doString("function f(a){a=a+6;return a;}\rvar b = f(7);");
+		ip.doString("var test = testAPI(5);");
+		//ip.doString("gg.drawCircle(300, 300, 100);");
+		
 		trace("findVar m:" + ip.vm.findVar("m"));
+		trace("findVar n:" + ip.vm.findVar("n"));
+		trace("findVar a:" + ip.vm.findVar("a"));
+		trace("findVar b:" + ip.vm.findVar("b"));
 		
 		// Stage:
 		// stage.stageWidth x stage.stageHeight @ stage.dpiScale
@@ -92,5 +108,7 @@ class Main extends Sprite
 		#end
 	}
 	
-	
+	public function testAPI(a:Int):Int {
+		return a * a;
+	}
 }

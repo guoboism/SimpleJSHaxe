@@ -27,7 +27,7 @@ import sjs.data.Token;
 
 class Lexer {
 
-	private static var from:Int = 0;// The index of the start of the token.
+	private static var from:Int = 0;// The index of the start of the token. //GB why I make it static as of the make() at bottom
 	private static var i:Int = 0;// The index of the current character.
 
 	public static function tokenize(src:String, prefix:String='=<>!+-*&|/%^', suffix:String='=<>&|+-'):Array<Token> {
@@ -35,9 +35,11 @@ class Lexer {
 		var c:Dynamic;                      // The current character.
 		var length:Int = src.length;
 		var n:Dynamic;                      // The number value.
-		var q:String;                      // The quote character.
-		var str:String;                    // The string value.
-		var result:Array<Token> = [];            // An array to hold the results.
+		var q:String;                      	// The quote character.
+		var str:String;                    	// The string value.
+		var result:Array<Token> = []; 		// An array to hold the results.
+		from = 0;
+		i= 0;
 
 		// Begin tokenization. If the source string is empty, return nothing.
 
@@ -265,12 +267,13 @@ class Lexer {
 			}
 		}
 		
-		
+		/*
 		trace("Tokens--------------"); 
 		for (i in 0...result.length) {
 			trace(result[i].type + " : " + result[i].value); 
 		}
 		trace("--------------");
+		*/
 		
 		return result;
 	}
