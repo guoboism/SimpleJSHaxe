@@ -1,9 +1,9 @@
-package SJS {
+package sjs;
   import flash.display.DisplayObjectContainer;
   import flash.display.DisplayObject;
   import flash.utils.getQualifiedClassName;
   
-  public class Inspector { 
+  class Inspector { 
     
     public static function jsonify(obj:*):String {
       return Inspector.inspect(obj, false);
@@ -126,4 +126,4 @@ package SJS {
      }
 
   }///class
-}//pkg
+
