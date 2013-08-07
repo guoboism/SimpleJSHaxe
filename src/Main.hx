@@ -5,6 +5,7 @@ import flash.display.Sprite;
 import flash.display.StageAlign;
 import flash.display.StageScaleMode;
 import flash.events.Event;
+import flash.events.MouseEvent;
 import flash.display.Stage;
 import flash.Lib;
 import flash.text.TextField;
@@ -57,6 +58,7 @@ class Main extends Sprite
 		tf.setTextFormat(format);
 		tf.text = "Hello World";
 		
+		//stage.addEventListener(MouseEvent.CLICK, onClick);
 		
 		
 		var ip:Interpreter = new Interpreter();
@@ -65,6 +67,9 @@ class Main extends Sprite
 		dict.set("MovieClip", MovieClip); //bind type
 		dict.set("testAPI", testAPI);//bind function   [] is not allow with dynamic types
 		dict.set("gg", graphics); //bind object
+		dict.set("stage", stage); //bind object
+		dict.set("MouseEvent_CLICK", MouseEvent.CLICK); //bind object
+		dict.set("onClick", onClick); //bind object
 		ip.pushDict(dict);
 		
 		var startTime;
@@ -89,6 +94,9 @@ class Main extends Sprite
 		ip.doString("var s = 3; s = testAPI(s);");
 		ip.doString("var s = 3; s = testAPI(s);");
 		ip.doString("gg.drawCircle(200, 200, 200);");
+		ip.doString("stage.addEventListener(MouseEvent_CLICK, onClick);");
+		
+		
 		//ip.doString("gg.drawCircle(200, 200, 200);");
 		
 		trace("findVar m:" + ip.vm.findVar("m"));
@@ -119,5 +127,9 @@ class Main extends Sprite
 	
 	public function testAPI(a:Int):Int {
 		return a * a;
+	}
+	
+	public function onClick(e:MouseEvent):Void {
+		trace("Mouse Clicked");
 	}
 }
