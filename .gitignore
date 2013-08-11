@@ -16,6 +16,12 @@ local.properties
 .settings/
 .loadpath
 
+#GB
+assets/
+.nmml
+nme-readme.txt
+.hxproj
+
 # External tool builders
 .externalToolBuilders/
 
